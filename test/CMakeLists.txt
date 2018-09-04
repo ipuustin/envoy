@@ -4,7 +4,7 @@ set(CMAKE_EXE_LINKER_FLAGS "${ENVOY_TEST_EXTRA_LINKER_FLAGS} ${CMAKE_EXE_LINKER_
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/generated)
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/helloworld.pb.h ${CMAKE_CURRENT_BINARY_DIR}/generated/helloworld.pb.cc
-  COMMAND ${ENVOY_PROTOBUF_PROTOC} -I=${CMAKE_CURRENT_SOURCE_DIR}/proto/
+  COMMAND protoc -I=${CMAKE_CURRENT_SOURCE_DIR}/proto/
           --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/generated
           ${CMAKE_CURRENT_SOURCE_DIR}/proto/helloworld.proto
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/proto/helloworld.proto

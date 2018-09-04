@@ -10,7 +10,7 @@ add_custom_command(
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/generated)
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/ratelimit.pb.h ${CMAKE_CURRENT_BINARY_DIR}/generated/ratelimit.pb.cc
-  COMMAND ${ENVOY_PROTOBUF_PROTOC} -I=${CMAKE_CURRENT_SOURCE_DIR}/ratelimit/
+  COMMAND protoc -I=${CMAKE_CURRENT_SOURCE_DIR}/ratelimit/
           --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/generated
           ${CMAKE_CURRENT_SOURCE_DIR}/ratelimit/ratelimit.proto
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/ratelimit/ratelimit.proto
