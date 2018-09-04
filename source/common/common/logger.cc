@@ -31,6 +31,12 @@ void LockingStderrSink::flush() {
   std::cerr << std::flush;
 }
 
+void LockingStderrSink::set_formatter(std::unique_ptr<spdlog::formatter> sink_formatter) {
+}
+
+void LockingStderrSink::set_pattern(const std::string &pattern) {
+}
+
 spdlog::logger& Registry::getLog(Id id) { return *all_loggers_[static_cast<int>(id)].logger_; }
 
 void Registry::initialize(uint64_t log_level, Thread::BasicLockable& lock) {

@@ -66,6 +66,8 @@ public:
   // spdlog::sinks::sink
   void log(const spdlog::details::log_msg& msg) override;
   void flush() override;
+  void set_formatter(std::unique_ptr<spdlog::formatter> sink_formatter) override;
+  void set_pattern(const std::string &pattern) override;
 
 private:
   Thread::BasicLockable* lock_{};
