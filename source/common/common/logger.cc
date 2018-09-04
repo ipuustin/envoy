@@ -23,7 +23,10 @@ Logger::Logger(const std::string& name) {
 
 void LockingStderrSink::log(const spdlog::details::log_msg& msg) {
   Thread::OptionalLockGuard<Thread::BasicLockable> guard(lock_);
-  std::cerr << msg.formatted.str();
+  // std::cerr << msg.formatted.str();
+  fmt::memory_buffer formatted;
+  sink::formatter_->format(msg, formatted);
+  std::cout << fmt::to_string(formatted);
 }
 
 void LockingStderrSink::flush() {
