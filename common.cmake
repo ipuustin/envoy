@@ -1,4 +1,4 @@
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb3 -fno-omit-frame-pointer -Wall -Wextra -Werror -Wnon-virtual-dtor -Woverloaded-virtual -Wold-style-cast -std=c++0x")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb3 -fno-omit-frame-pointer -Wall -Wextra -Wnon-virtual-dtor -Woverloaded-virtual -Wold-style-cast -std=c++0x")
 
 option(ENVOY_LIMIT_ERROR_LOG "limit the number of error log lines from compiler" OFF)
 if (ENVOY_LIMIT_ERROR_LOG)
