@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <cmath>
 
 #include "common/common/utility.h"
 
