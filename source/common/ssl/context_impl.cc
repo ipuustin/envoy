@@ -47,9 +47,12 @@ DH* get_dh2048() {
   };
 
   DH* dh = DH_new();
-  dh->p = BN_bin2bn(dh2048_p, sizeof(dh2048_p), nullptr);
-  dh->g = BN_bin2bn(dh2048_g, sizeof(dh2048_g), nullptr);
-  RELEASE_ASSERT(dh->p != nullptr && dh->g != nullptr);
+
+  BIGNUM * const dh_p = BN_bin2bn(dh2048_p, sizeof(dh2048_p), nullptr);
+  BIGNUM * const dh_g = BN_bin2bn(dh2048_g, sizeof(dh2048_g), nullptr);
+  if (dh_p == NULL || dh_g == NULL ||
+      !DH_set0_pqg(dh, dh_p, NULL, dh_g))
+      return NULL;
   return dh;
 }
 
@@ -73,7 +76,7 @@ ContextImpl::ContextImpl(ContextManagerImpl& parent, Stats::Scope& scope, Contex
     num_configured += std::count(cipher_suites.begin(), cipher_suites.end(), '|');
     if (sk_SSL_CIPHER_num(ctx_->cipher_list->ciphers) < static_cast<size_t>(num_configured)) {
 #else
-    if (sk_SSL_CIPHER_num(ctx_->cipher_list) < num_configured) {
+    if (sk_SSL_CIPHER_num(SSL_CTX_get_ciphers(ctx_.get())) < num_configured) {
 #endif
       throw EnvoyException(
           fmt::format("Unknown cipher specified in cipher suites {}", config.cipherSuites()));
@@ -355,11 +358,14 @@ std::string ContextImpl::getCertChainInformation() {
 std::string ContextImpl::getSerialNumber(X509* cert) {
   ASSERT(cert);
   ASN1_INTEGER* serial_number = X509_get_serialNumber(cert);
-  BIGNUM num_bn;
-  BN_init(&num_bn);
-  ASN1_INTEGER_to_BN(serial_number, &num_bn);
-  char* char_serial_number = BN_bn2hex(&num_bn);
-  BN_free(&num_bn);
+  BIGNUM *num_bn;
+  num_bn = BN_new();
+  if (!num_bn) {
+    return "";
+  }
+  ASN1_INTEGER_to_BN(serial_number, num_bn);
+  char* char_serial_number = BN_bn2hex(num_bn);
+  BN_free(num_bn);
   if (char_serial_number != nullptr) {
     std::string serial_number(char_serial_number);
     OPENSSL_free(char_serial_number);
