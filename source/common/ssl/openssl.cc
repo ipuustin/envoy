@@ -15,6 +15,9 @@ std::unique_ptr<std::mutex[]> OpenSsl::locks_;
 #endif
 
 void OpenSsl::initialize() {
+#ifndef OPENSSL_IS_BORINGSSL
+  OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CONFIG, NULL);
+#endif
   RELEASE_ASSERT(SSL_library_init());
 
 #ifndef OPENSSL_IS_BORINGSSL
