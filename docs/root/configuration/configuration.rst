@@ -21,4 +21,3 @@ Configuration reference
   runtime
   statistics
   tools/router_check
-  overload_manager/overload_manager

@@ -5,11 +5,11 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::Invoke;
 using testing::Return;
 using testing::ReturnPointee;
 using testing::ReturnRef;
+using testing::_;
 
 namespace Envoy {
 namespace RequestInfo {
@@ -64,11 +64,6 @@ MockRequestInfo::MockRequestInfo()
   }));
   ON_CALL(*this, bytesSent()).WillByDefault(ReturnPointee(&bytes_sent_));
   ON_CALL(*this, dynamicMetadata()).WillByDefault(ReturnRef(metadata_));
-  ON_CALL(*this, setRequestedServerName(_))
-      .WillByDefault(Invoke([this](const absl::string_view requested_server_name) {
-        requested_server_name_ = std::string(requested_server_name);
-      }));
-  ON_CALL(*this, requestedServerName()).WillByDefault(ReturnRef(requested_server_name_));
 }
 
 MockRequestInfo::~MockRequestInfo() {}

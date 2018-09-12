@@ -21,7 +21,6 @@
 #include "envoy/secret/secret_manager.h"
 #include "envoy/server/transport_socket_config.h"
 #include "envoy/ssl/context_manager.h"
-#include "envoy/stats/scope.h"
 #include "envoy/thread_local/thread_local.h"
 #include "envoy/upstream/cluster_manager.h"
 #include "envoy/upstream/health_checker.h"
@@ -34,13 +33,11 @@
 #include "common/config/metadata.h"
 #include "common/config/well_known_names.h"
 #include "common/network/utility.h"
-#include "common/stats/isolated_store_impl.h"
+#include "common/stats/stats_impl.h"
 #include "common/upstream/load_balancer_impl.h"
 #include "common/upstream/locality.h"
 #include "common/upstream/outlier_detection_impl.h"
 #include "common/upstream/resource_manager_impl.h"
-
-#include "server/init_manager_impl.h"
 
 namespace Envoy {
 namespace Upstream {
@@ -124,8 +121,6 @@ public:
   Network::Address::InstanceConstSharedPtr healthCheckAddress() const override {
     return health_check_address_;
   }
-  // Setting health check address is usually done at initialization. This is NOP by default.
-  void setHealthCheckAddress(Network::Address::InstanceConstSharedPtr) override {}
   const envoy::api::v2::core::Locality& locality() const override { return locality_; }
 
 protected:
@@ -170,14 +165,6 @@ public:
   void healthFlagClear(HealthFlag flag) override { health_flags_ &= ~enumToInt(flag); }
   bool healthFlagGet(HealthFlag flag) const override { return health_flags_ & enumToInt(flag); }
   void healthFlagSet(HealthFlag flag) override { health_flags_ |= enumToInt(flag); }
-
-  ActiveHealthFailureType getActiveHealthFailureType() const override {
-    return active_health_failure_type_;
-  }
-  void setActiveHealthFailureType(ActiveHealthFailureType type) override {
-    active_health_failure_type_ = type;
-  }
-
   void setHealthChecker(HealthCheckHostMonitorPtr&& health_checker) override {
     health_checker_ = std::move(health_checker);
   }
@@ -198,7 +185,6 @@ protected:
 
 private:
   std::atomic<uint64_t> health_flags_{};
-  ActiveHealthFailureType active_health_failure_type_{};
   std::atomic<uint32_t> weight_;
   std::atomic<bool> used_;
 };
@@ -238,18 +224,14 @@ private:
  */
 class HostSetImpl : public HostSet {
 public:
-  HostSetImpl(uint32_t priority, absl::optional<uint32_t> overprovisioning_factor)
-      : priority_(priority), overprovisioning_factor_(overprovisioning_factor.has_value()
-                                                          ? overprovisioning_factor.value()
-                                                          : kDefaultOverProvisioningFactor),
-        hosts_(new HostVector()), healthy_hosts_(new HostVector()) {}
+  HostSetImpl(uint32_t priority)
+      : priority_(priority), hosts_(new HostVector()), healthy_hosts_(new HostVector()) {}
 
   void updateHosts(HostVectorConstSharedPtr hosts, HostVectorConstSharedPtr healthy_hosts,
                    HostsPerLocalityConstSharedPtr hosts_per_locality,
                    HostsPerLocalityConstSharedPtr healthy_hosts_per_locality,
                    LocalityWeightsConstSharedPtr locality_weights, const HostVector& hosts_added,
-                   const HostVector& hosts_removed,
-                   absl::optional<uint32_t> overprovisioning_factor = absl::nullopt) override;
+                   const HostVector& hosts_removed) override;
 
   /**
    * Install a callback that will be invoked when the host set membership changes.
@@ -273,7 +255,6 @@ public:
   LocalityWeightsConstSharedPtr localityWeights() const override { return locality_weights_; }
   absl::optional<uint32_t> chooseLocality() override;
   uint32_t priority() const override { return priority_; }
-  uint32_t overprovisioning_factor() const override { return overprovisioning_factor_; }
 
 protected:
   virtual void runUpdateCallbacks(const HostVector& hosts_added, const HostVector& hosts_removed) {
@@ -285,7 +266,6 @@ private:
   double effectiveLocalityWeight(uint32_t index) const;
 
   uint32_t priority_;
-  uint32_t overprovisioning_factor_;
   HostVectorConstSharedPtr hosts_;
   HostVectorConstSharedPtr healthy_hosts_;
   HostsPerLocalityConstSharedPtr hosts_per_locality_{HostsPerLocalityImpl::empty()};
@@ -323,14 +303,12 @@ public:
   }
   std::vector<std::unique_ptr<HostSet>>& hostSetsPerPriority() override { return host_sets_; }
   // Get the host set for this priority level, creating it if necessary.
-  HostSet& getOrCreateHostSet(uint32_t priority,
-                              absl::optional<uint32_t> overprovisioning_factor = absl::nullopt);
+  HostSet& getOrCreateHostSet(uint32_t priority);
 
 protected:
   // Allows subclasses of PrioritySetImpl to create their own type of HostSetImpl.
-  virtual HostSetImplPtr createHostSet(uint32_t priority,
-                                       absl::optional<uint32_t> overprovisioning_factor) {
-    return HostSetImplPtr{new HostSetImpl(priority, overprovisioning_factor)};
+  virtual HostSetImplPtr createHostSet(uint32_t priority) {
+    return HostSetImplPtr{new HostSetImpl(priority)};
   }
 
 private:
@@ -350,12 +328,13 @@ private:
 /**
  * Implementation of ClusterInfo that reads from JSON.
  */
-class ClusterInfoImpl : public ClusterInfo {
+class ClusterInfoImpl : public ClusterInfo,
+                        public Server::Configuration::TransportSocketFactoryContext {
 public:
   ClusterInfoImpl(const envoy::api::v2::Cluster& config,
                   const envoy::api::v2::core::BindConfig& bind_config, Runtime::Loader& runtime,
-                  Network::TransportSocketFactoryPtr&& socket_factory,
-                  Stats::ScopePtr&& stats_scope, bool added_via_api);
+                  Stats::Store& stats, Ssl::ContextManager& ssl_context_manager,
+                  Secret::SecretManager& secret_manager, bool added_via_api);
 
   static ClusterStats generateStats(Stats::Scope& scope);
   static ClusterLoadReportStats generateLoadReportStats(Stats::Scope& scope);
@@ -374,17 +353,11 @@ public:
   }
   uint64_t features() const override { return features_; }
   const Http::Http2Settings& http2Settings() const override { return http2_settings_; }
-  ProtocolOptionsConfigConstSharedPtr
-  extensionProtocolOptions(const std::string& name) const override;
   LoadBalancerType lbType() const override { return lb_type_; }
   envoy::api::v2::Cluster::DiscoveryType type() const override { return type_; }
   const absl::optional<envoy::api::v2::Cluster::RingHashLbConfig>&
   lbRingHashConfig() const override {
     return lb_ring_hash_config_;
-  }
-  const absl::optional<envoy::api::v2::Cluster::OriginalDstLbConfig>&
-  lbOriginalDstConfig() const override {
-    return lb_original_dst_config_;
   }
   bool maintenanceMode() const override;
   uint64_t maxRequestsPerConnection() const override { return max_requests_per_connection_; }
@@ -402,11 +375,16 @@ public:
   const LoadBalancerSubsetInfo& lbSubsetInfo() const override { return lb_subset_; }
   const envoy::api::v2::core::Metadata& metadata() const override { return metadata_; }
 
+  // Server::Configuration::TransportSocketFactoryContext
+  Ssl::ContextManager& sslContextManager() override { return ssl_context_manager_; }
+
   const Network::ConnectionSocket::OptionsSharedPtr& clusterSocketOptions() const override {
     return cluster_socket_options_;
   };
 
   bool drainConnectionsOnHostRemoval() const override { return drain_connections_on_host_removal_; }
+
+  Secret::SecretManager& secretManager() override { return secret_manager_; }
 
 private:
   struct ResourceManagers {
@@ -428,36 +406,27 @@ private:
   const std::chrono::milliseconds connect_timeout_;
   absl::optional<std::chrono::milliseconds> idle_timeout_;
   const uint32_t per_connection_buffer_limit_bytes_;
-  Network::TransportSocketFactoryPtr transport_socket_factory_;
   Stats::ScopePtr stats_scope_;
   mutable ClusterStats stats_;
   Stats::IsolatedStoreImpl load_report_stats_store_;
   mutable ClusterLoadReportStats load_report_stats_;
+  Network::TransportSocketFactoryPtr transport_socket_factory_;
   const uint64_t features_;
   const Http::Http2Settings http2_settings_;
-  const std::map<std::string, ProtocolOptionsConfigConstSharedPtr> extension_protocol_options_;
   mutable ResourceManagers resource_managers_;
   const std::string maintenance_mode_runtime_key_;
   const Network::Address::InstanceConstSharedPtr source_address_;
   LoadBalancerType lb_type_;
   absl::optional<envoy::api::v2::Cluster::RingHashLbConfig> lb_ring_hash_config_;
-  absl::optional<envoy::api::v2::Cluster::OriginalDstLbConfig> lb_original_dst_config_;
+  Ssl::ContextManager& ssl_context_manager_;
   const bool added_via_api_;
   LoadBalancerSubsetInfoImpl lb_subset_;
   const envoy::api::v2::core::Metadata metadata_;
   const envoy::api::v2::Cluster::CommonLbConfig common_lb_config_;
   const Network::ConnectionSocket::OptionsSharedPtr cluster_socket_options_;
   const bool drain_connections_on_host_removal_;
+  Secret::SecretManager& secret_manager_;
 };
-
-/**
- * Function that creates a Network::TransportSocketFactoryPtr
- * given a cluster configuration and transport socket factory
- * context.
- */
-Network::TransportSocketFactoryPtr
-createTransportSocketFactory(const envoy::api::v2::Cluster& config,
-                             Server::Configuration::TransportSocketFactoryContext& factory_context);
 
 /**
  * Base class all primary clusters.
@@ -509,9 +478,10 @@ public:
   void initialize(std::function<void()> callback) override;
 
 protected:
-  ClusterImplBase(const envoy::api::v2::Cluster& cluster, Runtime::Loader& runtime,
-                  Server::Configuration::TransportSocketFactoryContext& factory_context,
-                  Stats::ScopePtr&& stats_scope, bool added_via_api);
+  ClusterImplBase(const envoy::api::v2::Cluster& cluster,
+                  const envoy::api::v2::core::BindConfig& bind_config, Runtime::Loader& runtime,
+                  Stats::Store& stats, Ssl::ContextManager& ssl_context_manager,
+                  Secret::SecretManager& secret_manager, bool added_via_api);
 
   /**
    * Overridden by every concrete cluster. The cluster should do whatever pre-init is needed. E.g.,
@@ -520,21 +490,12 @@ protected:
   virtual void startPreInit() PURE;
 
   /**
-   * Called by every concrete cluster when pre-init is complete. At this point,
-   * shared init starts init_manager_ initialization and determines if there
-   * is an initial health check pass needed, etc.
+   * Called by every concrete cluster when pre-init is complete. At this point, shared init takes
+   * over and determines if there is an initial health check pass needed, etc.
    */
   void onPreInitComplete();
 
-  /**
-   * Called by every concrete cluster after all targets registered at init manager are
-   * initialized. At this point, shared init takes over and determines if there is an initial health
-   * check pass needed, etc.
-   */
-  void onInitDone();
-
   Runtime::Loader& runtime_;
-  Server::InitManagerImpl init_manager_;
   ClusterInfoConstSharedPtr info_; // This cluster info stores the stats scope so it must be
                                    // initialized first and destroyed last.
   HealthCheckerSharedPtr health_checker_;
@@ -592,8 +553,7 @@ public:
   updateClusterPrioritySet(const uint32_t priority, HostVectorSharedPtr&& current_hosts,
                            const absl::optional<HostVector>& hosts_added,
                            const absl::optional<HostVector>& hosts_removed,
-                           const absl::optional<Upstream::Host::HealthFlag> health_checker_flag,
-                           absl::optional<uint32_t> overprovisioning_factor = absl::nullopt);
+                           const absl::optional<Upstream::Host::HealthFlag> health_checker_flag);
 
   // Returns the size of the current cluster priority state.
   size_t size() const { return priority_state_.size(); }
@@ -616,8 +576,8 @@ typedef std::unique_ptr<PriorityStateManager> PriorityStateManagerPtr;
 class StaticClusterImpl : public ClusterImplBase {
 public:
   StaticClusterImpl(const envoy::api::v2::Cluster& cluster, Runtime::Loader& runtime,
-                    Server::Configuration::TransportSocketFactoryContext& factory_context,
-                    Stats::ScopePtr&& stats_scope, bool added_via_api);
+                    Stats::Store& stats, Ssl::ContextManager& ssl_context_manager,
+                    const LocalInfo::LocalInfo& local_info, ClusterManager& cm, bool added_via_api);
 
   // Upstream::Cluster
   InitializePhase initializePhase() const override { return InitializePhase::Primary; }
@@ -636,37 +596,8 @@ class BaseDynamicClusterImpl : public ClusterImplBase {
 protected:
   using ClusterImplBase::ClusterImplBase;
 
-  /**
-   * Updates the host list of a single priority by reconciling the list of new hosts
-   * with existing hosts.
-   *
-   * @param new_hosts the full lists of hosts in the new configuration.
-   * @param current_priority_hosts the full lists of hosts for the priority to be updated. The list
-   * will be modified to contain the updated list of hosts.
-   * @param hosts_added_to_current_priority will be populated with hosts added to the priority.
-   * @param hosts_removed_from_current_priority will be populated with hosts removed from the
-   * priority.
-   * @param updated_hosts is used to aggregate the new state of all hosts accross priority, and will
-   * be updated with the hosts that remain in this priority after the update.
-   * @return whether the hosts for the priority changed.
-   */
-  bool updateDynamicHostList(const HostVector& new_hosts, HostVector& current_priority_hosts,
-                             HostVector& hosts_added_to_current_priority,
-                             HostVector& hosts_removed_from_current_priority,
-                             std::unordered_map<std::string, HostSharedPtr>& updated_hosts);
-
-  typedef std::unordered_map<std::string, Upstream::HostSharedPtr> HostMap;
-
-  /**
-   * Updates the internal collection of all hosts. This should be called with the updated
-   * map of hosts after issuing updateDynamicHostList for each priority.
-   *
-   * @param all_hosts the updated map of address to host after a cluster update.
-   */
-  void updateHostMap(HostMap&& all_hosts) { all_hosts_ = std::move(all_hosts); }
-
-private:
-  HostMap all_hosts_;
+  bool updateDynamicHostList(const HostVector& new_hosts, HostVector& current_hosts,
+                             HostVector& hosts_added, HostVector& hosts_removed);
 };
 
 /**
@@ -676,9 +607,10 @@ private:
 class StrictDnsClusterImpl : public BaseDynamicClusterImpl {
 public:
   StrictDnsClusterImpl(const envoy::api::v2::Cluster& cluster, Runtime::Loader& runtime,
-                       Network::DnsResolverSharedPtr dns_resolver,
-                       Server::Configuration::TransportSocketFactoryContext& factory_context,
-                       Stats::ScopePtr&& stats_scope, bool added_via_api);
+                       Stats::Store& stats, Ssl::ContextManager& ssl_context_manager,
+                       const LocalInfo::LocalInfo& local_info,
+                       Network::DnsResolverSharedPtr dns_resolver, ClusterManager& cm,
+                       Event::Dispatcher& dispatcher, bool added_via_api);
 
   // Upstream::Cluster
   InitializePhase initializePhase() const override { return InitializePhase::Primary; }

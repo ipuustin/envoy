@@ -14,7 +14,6 @@
 #include "openssl/ssl.h"
 #include "testing/base/public/benchmark.h"
 
-using testing::_;
 using testing::AtLeast;
 using testing::Invoke;
 using testing::NiceMock;
@@ -22,6 +21,7 @@ using testing::Return;
 using testing::ReturnNew;
 using testing::ReturnRef;
 using testing::SaveArg;
+using testing::_;
 
 namespace Envoy {
 namespace Extensions {
@@ -62,10 +62,10 @@ class FastMockOsSysCalls : public Api::MockOsSysCalls {
 public:
   FastMockOsSysCalls(const std::vector<uint8_t>& client_hello) : client_hello_(client_hello) {}
 
-  Api::SysCallSizeResult recv(int, void* buffer, size_t length, int) override {
+  ssize_t recv(int, void* buffer, size_t length, int) override {
     RELEASE_ASSERT(length >= client_hello_.size(), "");
     memcpy(buffer, client_hello_.data(), client_hello_.size());
-    return Api::SysCallSizeResult{ssize_t(client_hello_.size()), 0};
+    return client_hello_.size();
   }
 
   const std::vector<uint8_t> client_hello_;

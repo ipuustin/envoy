@@ -1,5 +1,3 @@
-#include "envoy/stats/scope.h"
-
 #include "common/event/dispatcher_impl.h"
 #include "common/grpc/async_client_impl.h"
 #include "common/http/async_client_impl.h"
@@ -13,19 +11,18 @@
 #include "test/integration/fake_upstream.h"
 #include "test/mocks/grpc/mocks.h"
 #include "test/mocks/local_info/mocks.h"
-#include "test/mocks/server/mocks.h"
+#include "test/mocks/secret/mocks.h"
 #include "test/mocks/tracing/mocks.h"
 #include "test/mocks/upstream/mocks.h"
 #include "test/proto/helloworld.pb.h"
 #include "test/test_common/environment.h"
-#include "test/test_common/test_time.h"
 
-using testing::_;
 using testing::Invoke;
 using testing::InvokeWithoutArgs;
 using testing::NiceMock;
 using testing::Return;
 using testing::ReturnRef;
+using testing::_;
 
 namespace Envoy {
 namespace Grpc {
@@ -85,9 +82,7 @@ public:
     grpc_stream_->sendMessage(request_msg, end_stream);
 
     helloworld::HelloRequest received_msg;
-    AssertionResult result =
-        fake_stream_->waitForGrpcMessage(dispatcher_helper_.dispatcher_, received_msg);
-    RELEASE_ASSERT(result, result.message());
+    fake_stream_->waitForGrpcMessage(dispatcher_helper_.dispatcher_, received_msg);
     EXPECT_THAT(request_msg, ProtoEq(received_msg));
   }
 
@@ -121,7 +116,7 @@ public:
       reply_headers->addReference(value.first, value.second);
     }
     expectInitialMetadata(metadata);
-    fake_stream_->encodeHeaders(Http::HeaderMapImpl(*reply_headers), false);
+    fake_stream_->encodeHeaders(*reply_headers, false);
   }
 
   void sendReply() {
@@ -167,8 +162,7 @@ public:
 
   void closeStream() {
     grpc_stream_->closeStream();
-    AssertionResult result = fake_stream_->waitForEndStream(dispatcher_helper_.dispatcher_);
-    RELEASE_ASSERT(result, result.message());
+    fake_stream_->waitForEndStream(dispatcher_helper_.dispatcher_);
   }
 
   DispatcherHelper& dispatcher_helper_;
@@ -203,8 +197,7 @@ public:
 class GrpcClientIntegrationTest : public GrpcClientIntegrationParamTest {
 public:
   GrpcClientIntegrationTest()
-      : method_descriptor_(helloworld::Greeter::descriptor()->FindMethodByName("SayHello")),
-        dispatcher_(test_time_.timeSource()) {}
+      : method_descriptor_(helloworld::Greeter::descriptor()->FindMethodByName("SayHello")) {}
 
   virtual void initialize() {
     if (fake_upstream_ == nullptr) {
@@ -231,10 +224,8 @@ public:
 
   void TearDown() override {
     if (fake_connection_) {
-      AssertionResult result = fake_connection_->close();
-      RELEASE_ASSERT(result, result.message());
-      result = fake_connection_->waitForDisconnect();
-      RELEASE_ASSERT(result, result.message());
+      fake_connection_->close();
+      fake_connection_->waitForDisconnect();
       fake_connection_.reset();
     }
   }
@@ -276,7 +267,7 @@ public:
     envoy::api::v2::core::GrpcService config;
     config.mutable_envoy_grpc()->set_cluster_name(fake_cluster_name_);
     fillServiceWideInitialMetadata(config);
-    return std::make_unique<AsyncClientImpl>(cm_, config, dispatcher_.timeSource());
+    return std::make_unique<AsyncClientImpl>(cm_, config);
   }
 
   virtual envoy::api::v2::core::GrpcService createGoogleGrpcConfig() {
@@ -300,8 +291,7 @@ public:
   }
 
   void expectInitialHeaders(FakeStream& fake_stream, const TestMetadata& initial_metadata) {
-    AssertionResult result = fake_stream.waitForHeadersComplete();
-    RELEASE_ASSERT(result, result.message());
+    fake_stream.waitForHeadersComplete();
     Http::TestHeaderMapImpl stream_headers(fake_stream.headers());
     EXPECT_EQ("POST", stream_headers.get_(":method"));
     EXPECT_EQ("/helloworld.Greeter/SayHello", stream_headers.get_(":path"));
@@ -343,12 +333,9 @@ public:
     EXPECT_NE(request->grpc_request_, nullptr);
 
     if (!fake_connection_) {
-      AssertionResult result = fake_upstream_->waitForHttpConnection(dispatcher_, fake_connection_);
-      RELEASE_ASSERT(result, result.message());
+      fake_connection_ = fake_upstream_->waitForHttpConnection(dispatcher_);
     }
-    fake_streams_.emplace_back();
-    AssertionResult result = fake_connection_->waitForNewStream(dispatcher_, fake_streams_.back());
-    RELEASE_ASSERT(result, result.message());
+    fake_streams_.push_back(fake_connection_->waitForNewStream(dispatcher_));
     auto& fake_stream = *fake_streams_.back();
     request->fake_stream_ = &fake_stream;
 
@@ -356,8 +343,7 @@ public:
     expectExtraHeaders(fake_stream);
 
     helloworld::HelloRequest received_msg;
-    result = fake_stream.waitForGrpcMessage(dispatcher_, received_msg);
-    RELEASE_ASSERT(result, result.message());
+    fake_stream.waitForGrpcMessage(dispatcher_, received_msg);
     EXPECT_THAT(request_msg, ProtoEq(received_msg));
 
     return request;
@@ -376,12 +362,9 @@ public:
     EXPECT_NE(stream->grpc_stream_, nullptr);
 
     if (!fake_connection_) {
-      AssertionResult result = fake_upstream_->waitForHttpConnection(dispatcher_, fake_connection_);
-      RELEASE_ASSERT(result, result.message());
+      fake_connection_ = fake_upstream_->waitForHttpConnection(dispatcher_);
     }
-    fake_streams_.emplace_back();
-    AssertionResult result = fake_connection_->waitForNewStream(dispatcher_, fake_streams_.back());
-    RELEASE_ASSERT(result, result.message());
+    fake_streams_.push_back(fake_connection_->waitForNewStream(dispatcher_));
     auto& fake_stream = *fake_streams_.back();
     stream->fake_stream_ = &fake_stream;
 
@@ -395,7 +378,6 @@ public:
   FakeHttpConnectionPtr fake_connection_;
   std::vector<FakeStreamPtr> fake_streams_;
   const Protobuf::MethodDescriptor* method_descriptor_;
-  DangerousDeprecatedTestTime test_time_;
   Event::DispatcherImpl dispatcher_;
   DispatcherHelper dispatcher_helper_{dispatcher_};
   Stats::IsolatedStoreImpl* stats_store_ = new Stats::IsolatedStoreImpl();
@@ -464,10 +446,10 @@ public:
       tls_cert->mutable_private_key()->set_filename(
           TestEnvironment::runfilesPath("test/config/integration/certs/clientkey.pem"));
     }
-    auto cfg = std::make_unique<Ssl::ClientContextConfigImpl>(tls_context, factory_context_);
+    Ssl::ClientContextConfigImpl cfg(tls_context, secret_manager_);
 
-    mock_cluster_info_->transport_socket_factory_ = std::make_unique<Ssl::ClientSslSocketFactory>(
-        std::move(cfg), context_manager_, *stats_store_);
+    mock_cluster_info_->transport_socket_factory_ =
+        std::make_unique<Ssl::ClientSslSocketFactory>(cfg, context_manager_, *stats_store_);
     ON_CALL(*mock_cluster_info_, transportSocketFactory())
         .WillByDefault(ReturnRef(*mock_cluster_info_->transport_socket_factory_));
     async_client_transport_socket_ =
@@ -494,15 +476,15 @@ public:
           TestEnvironment::runfilesPath("test/config/integration/certs/cacert.pem"));
     }
 
-    auto cfg = std::make_unique<Ssl::ServerContextConfigImpl>(tls_context, factory_context_);
+    Ssl::ServerContextConfigImpl cfg(tls_context, secret_manager_);
 
     static Stats::Scope* upstream_stats_store = new Stats::IsolatedStoreImpl();
     return std::make_unique<Ssl::ServerSslSocketFactory>(
-        std::move(cfg), context_manager_, *upstream_stats_store, std::vector<std::string>{});
+        cfg, context_manager_, *upstream_stats_store, std::vector<std::string>{});
   }
 
   bool use_client_cert_{};
-  testing::NiceMock<Server::Configuration::MockTransportSocketFactoryContext> factory_context_;
+  Secret::MockSecretManager secret_manager_;
 };
 
 } // namespace

@@ -147,11 +147,8 @@ public:
   }
 
   void waitForLoadStatsStream() {
-    AssertionResult result =
-        load_report_upstream_->waitForHttpConnection(*dispatcher_, fake_loadstats_connection_);
-    RELEASE_ASSERT(result, result.message());
-    result = fake_loadstats_connection_->waitForNewStream(*dispatcher_, loadstats_stream_);
-    RELEASE_ASSERT(result, result.message());
+    fake_loadstats_connection_ = load_report_upstream_->waitForHttpConnection(*dispatcher_);
+    loadstats_stream_ = fake_loadstats_connection_->waitForNewStream(*dispatcher_);
   }
 
   void
@@ -164,9 +161,6 @@ public:
       return;
     } else if (loadstats_request.cluster_stats_size() == 0) {
       loadstats_request.CopyFrom(local_loadstats_request);
-      ASSERT_TRUE(loadstats_request.has_node());
-      ASSERT_FALSE(loadstats_request.node().id().empty());
-      ASSERT_FALSE(loadstats_request.node().cluster().empty());
       return;
     }
 
@@ -224,9 +218,7 @@ public:
     // merge until all the expected load has been reported.
     do {
       envoy::service::load_stats::v2::LoadStatsRequest local_loadstats_request;
-      AssertionResult result =
-          loadstats_stream_->waitForGrpcMessage(*dispatcher_, local_loadstats_request);
-      RELEASE_ASSERT(result, result.message());
+      loadstats_stream_->waitForGrpcMessage(*dispatcher_, local_loadstats_request);
       // Sanity check and clear the measured load report interval.
       for (auto& cluster_stats : *local_loadstats_request.mutable_cluster_stats()) {
         const uint32_t actual_load_report_interval_ms =
@@ -252,13 +244,10 @@ public:
   }
 
   void waitForUpstreamResponse(uint32_t endpoint_index, uint32_t response_code = 200) {
-    AssertionResult result = service_upstream_[endpoint_index]->waitForHttpConnection(
-        *dispatcher_, fake_upstream_connection_);
-    RELEASE_ASSERT(result, result.message());
-    result = fake_upstream_connection_->waitForNewStream(*dispatcher_, upstream_request_);
-    RELEASE_ASSERT(result, result.message());
-    result = upstream_request_->waitForEndStream(*dispatcher_);
-    RELEASE_ASSERT(result, result.message());
+    fake_upstream_connection_ =
+        service_upstream_[endpoint_index]->waitForHttpConnection(*dispatcher_);
+    upstream_request_ = fake_upstream_connection_->waitForNewStream(*dispatcher_);
+    upstream_request_->waitForEndStream(*dispatcher_);
 
     upstream_request_->encodeHeaders(
         Http::TestHeaderMapImpl{{":status", std::to_string(response_code)}}, false);
@@ -304,10 +293,8 @@ public:
 
   void cleanupLoadStatsConnection() {
     if (fake_loadstats_connection_ != nullptr) {
-      AssertionResult result = fake_loadstats_connection_->close();
-      RELEASE_ASSERT(result, result.message());
-      result = fake_loadstats_connection_->waitForDisconnect();
-      RELEASE_ASSERT(result, result.message());
+      fake_loadstats_connection_->close();
+      fake_loadstats_connection_->waitForDisconnect();
     }
   }
 

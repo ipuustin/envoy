@@ -60,8 +60,6 @@ public:
   Runtime::Loader& runtime() { return runtime_; }
   LightstepTracerStats& tracerStats() { return tracer_stats_; }
 
-  static const size_t DefaultMinFlushSpans;
-
   // Tracer::OpenTracingDriver
   opentracing::Tracer& tracer() override;
   PropagationMode propagationMode() const override { return propagation_mode_; }
@@ -121,7 +119,7 @@ private:
   std::unique_ptr<lightstep::LightStepTracerOptions> options_;
   const PropagationMode propagation_mode_;
 };
-} // namespace Lightstep
+}
 } // namespace Tracers
 } // namespace Extensions
 } // namespace Envoy

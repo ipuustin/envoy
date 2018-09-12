@@ -15,13 +15,15 @@
 namespace Envoy {
 namespace Upstream {
 
-// Priority levels and localities are considered overprovisioned with this factor.
-static constexpr uint32_t kDefaultOverProvisioningFactor = 140;
+// Priority levels and localities are considered overprovisioned with this factor. This means that
+// we don't consider a priority level or locality unhealthy until the percentage of healthy hosts
+// multiplied by kOverProvisioningFactor drops below 100.
+static constexpr uint32_t kOverProvisioningFactor = 140;
 
 /**
  * Base class for all LB implementations.
  */
-class LoadBalancerBase : public LoadBalancer {
+class LoadBalancerBase {
 public:
   // A utility function to chose a priority level based on a precomputed hash and
   // a priority vector in the style of per_priority_load_
@@ -29,24 +31,7 @@ public:
   // Returns the priority, a number between 0 and per_priority_load.size()-1
   static uint32_t choosePriority(uint64_t hash, const std::vector<uint32_t>& per_priority_load);
 
-  HostConstSharedPtr chooseHost(LoadBalancerContext* context) override;
-
 protected:
-  /**
-   * By implementing this method instead of chooseHost, host selection will
-   * be subject to host filters specified by LoadBalancerContext.
-   *
-   * Host selection will be retried up to the number specified by
-   * hostSelectionRetryCount on LoadBalancerContext, and if no hosts are found
-   * within the allowed attempts, the host that was selected during the last
-   * attempt will be returned.
-   *
-   * If host selection is idempotent (i.e. retrying will not change the outcome),
-   * sub classes should override chooseHost to avoid the unnecessary overhead of
-   * retrying host selection.
-   */
-  virtual HostConstSharedPtr chooseHostOnce(LoadBalancerContext* context) PURE;
-
   /**
    * For the given host_set @return if we should be in a panic mode or not. For example, if the
    * majority of hosts are unhealthy we'll be likely in a panic mode. In this case we'll route
@@ -59,7 +44,7 @@ protected:
                    const envoy::api::v2::Cluster::CommonLbConfig& common_config);
 
   // Choose host set randomly, based on the per_priority_load_;
-  HostSet& chooseHostSet(LoadBalancerContext* context);
+  HostSet& chooseHostSet();
 
   uint32_t percentageLoad(uint32_t priority) const { return per_priority_load_[priority]; }
 
@@ -79,26 +64,6 @@ protected:
   std::vector<uint32_t> per_priority_load_;
   // The health (0-100) for each priority level.
   std::vector<uint32_t> per_priority_health_;
-};
-
-class LoadBalancerContextBase : public LoadBalancerContext {
-public:
-  absl::optional<uint64_t> computeHashKey() override { return {}; }
-
-  const Network::Connection* downstreamConnection() const override { return nullptr; }
-
-  const Router::MetadataMatchCriteria* metadataMatchCriteria() override { return nullptr; }
-
-  const Http::HeaderMap* downstreamHeaders() const override { return nullptr; }
-
-  const PriorityLoad& determinePriorityLoad(const PrioritySet&,
-                                            const PriorityLoad& original_priority_load) override {
-    return original_priority_load;
-  }
-
-  bool shouldSelectAnotherHost(const Host&) override { return false; }
-
-  uint32_t hostSelectionRetryCount() const override { return 0; }
 };
 
 /**
@@ -167,7 +132,7 @@ protected:
   /**
    * Pick the host source to use, doing zone aware routing when the hosts are sufficiently healthy.
    */
-  HostsSource hostSourceToUse(LoadBalancerContext* context);
+  HostsSource hostSourceToUse();
 
   /**
    * Index into priority_set via hosts source descriptor.
@@ -255,15 +220,15 @@ private:
  * This base class also supports unweighted selection which derived classes can use to customize
  * behavior. Derived classes can also override how host weight is determined when in weighted mode.
  */
-class EdfLoadBalancerBase : public ZoneAwareLoadBalancerBase {
+class EdfLoadBalancerBase : public LoadBalancer, public ZoneAwareLoadBalancerBase {
 public:
   EdfLoadBalancerBase(const PrioritySet& priority_set, const PrioritySet* local_priority_set,
                       ClusterStats& stats, Runtime::Loader& runtime,
                       Runtime::RandomGenerator& random,
                       const envoy::api::v2::Cluster::CommonLbConfig& common_config);
 
-  // Upstream::LoadBalancerBase
-  HostConstSharedPtr chooseHostOnce(LoadBalancerContext* context) override;
+  // Upstream::LoadBalancer
+  HostConstSharedPtr chooseHost(LoadBalancerContext* context) override;
 
 protected:
   struct Scheduler {
@@ -376,7 +341,7 @@ private:
 /**
  * Random load balancer that picks a random host out of all hosts.
  */
-class RandomLoadBalancer : public ZoneAwareLoadBalancerBase {
+class RandomLoadBalancer : public LoadBalancer, ZoneAwareLoadBalancerBase {
 public:
   RandomLoadBalancer(const PrioritySet& priority_set, const PrioritySet* local_priority_set,
                      ClusterStats& stats, Runtime::Loader& runtime,
@@ -385,8 +350,8 @@ public:
       : ZoneAwareLoadBalancerBase(priority_set, local_priority_set, stats, runtime, random,
                                   common_config) {}
 
-  // Upstream::LoadBalancerBase
-  HostConstSharedPtr chooseHostOnce(LoadBalancerContext* context) override;
+  // Upstream::LoadBalancer
+  HostConstSharedPtr chooseHost(LoadBalancerContext* context) override;
 };
 
 /**

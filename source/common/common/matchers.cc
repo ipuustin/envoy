@@ -3,65 +3,22 @@
 #include "envoy/api/v2/core/base.pb.h"
 
 #include "common/config/metadata.h"
+#include "common/protobuf/protobuf.h"
 
 #include "absl/strings/match.h"
 
 namespace Envoy {
 namespace Matchers {
 
-ValueMatcherConstSharedPtr ValueMatcher::create(const envoy::type::matcher::ValueMatcher& v) {
-  switch (v.match_pattern_case()) {
-  case envoy::type::matcher::ValueMatcher::kNullMatch:
-    return std::make_shared<const NullMatcher>();
-  case envoy::type::matcher::ValueMatcher::kDoubleMatch:
-    return std::make_shared<const DoubleMatcher>(v.double_match());
-  case envoy::type::matcher::ValueMatcher::kStringMatch:
-    return std::make_shared<const StringMatcher>(v.string_match());
-  case envoy::type::matcher::ValueMatcher::kBoolMatch:
-    return std::make_shared<const BoolMatcher>(v.bool_match());
-  case envoy::type::matcher::ValueMatcher::kPresentMatch:
-    return std::make_shared<const PresentMatcher>(v.present_match());
-  case envoy::type::matcher::ValueMatcher::kListMatch:
-    return std::make_shared<const ListMatcher>(v.list_match());
-  default:
-    NOT_REACHED_GCOVR_EXCL_LINE;
-  }
-}
-
-bool NullMatcher::match(const ProtobufWkt::Value& value) const {
-  return value.kind_case() == ProtobufWkt::Value::kNullValue;
-}
-
-bool BoolMatcher::match(const ProtobufWkt::Value& value) const {
-  return value.kind_case() == ProtobufWkt::Value::kBoolValue && matcher_ == value.bool_value();
-}
-
-bool PresentMatcher::match(const ProtobufWkt::Value& value) const {
-  return matcher_ && value.kind_case() != ProtobufWkt::Value::KIND_NOT_SET;
-}
-
-bool DoubleMatcher::match(const ProtobufWkt::Value& value) const {
-  if (value.kind_case() != ProtobufWkt::Value::kNumberValue) {
-    return false;
-  }
-
-  const double v = value.number_value();
+bool DoubleMatcher::match(double value) const {
   switch (matcher_.match_pattern_case()) {
   case envoy::type::matcher::DoubleMatcher::kRange:
-    return matcher_.range().start() <= v && v < matcher_.range().end();
+    return matcher_.range().start() <= value && value < matcher_.range().end();
   case envoy::type::matcher::DoubleMatcher::kExact:
-    return matcher_.exact() == v;
+    return matcher_.exact() == value;
   default:
     NOT_REACHED_GCOVR_EXCL_LINE;
   };
-}
-
-bool StringMatcher::match(const ProtobufWkt::Value& value) const {
-  if (value.kind_case() != ProtobufWkt::Value::kStringValue) {
-    return false;
-  }
-
-  return match(value.string_value());
 }
 
 bool StringMatcher::match(const std::string& value) const {
@@ -79,39 +36,54 @@ bool StringMatcher::match(const std::string& value) const {
   }
 }
 
-ListMatcher::ListMatcher(const envoy::type::matcher::ListMatcher& matcher) : matcher_(matcher) {
-  ASSERT(matcher_.match_pattern_case() == envoy::type::matcher::ListMatcher::kOneOf);
-
-  oneof_value_matcher_ = ValueMatcher::create(matcher_.one_of());
-}
-
-bool ListMatcher::match(const ProtobufWkt::Value& value) const {
-  if (value.kind_case() != ProtobufWkt::Value::kListValue) {
-    return false;
-  }
-
-  if (oneof_value_matcher_) {
-    for (const auto& lv : value.list_value().values()) {
-      if (oneof_value_matcher_->match(lv)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 MetadataMatcher::MetadataMatcher(const envoy::type::matcher::MetadataMatcher& matcher)
     : matcher_(matcher) {
   for (const auto& seg : matcher.path()) {
     path_.push_back(seg.key());
   }
   const auto& v = matcher_.value();
-  value_matcher_ = ValueMatcher::create(v);
+  switch (v.match_pattern_case()) {
+  case envoy::type::matcher::MetadataMatcher_Value::kNullMatch:
+    null_matcher_ = true;
+    break;
+  case envoy::type::matcher::MetadataMatcher_Value::kDoubleMatch:
+    double_matcher_.emplace(v.double_match());
+    break;
+  case envoy::type::matcher::MetadataMatcher_Value::kStringMatch:
+    string_matcher_.emplace(v.string_match());
+    break;
+  case envoy::type::matcher::MetadataMatcher_Value::kBoolMatch:
+    bool_matcher_.emplace(v.bool_match());
+    break;
+  case envoy::type::matcher::MetadataMatcher_Value::kPresentMatch:
+    present_matcher_ = v.present_match();
+    break;
+  default:
+    NOT_REACHED_GCOVR_EXCL_LINE;
+  }
 }
 
 bool MetadataMatcher::match(const envoy::api::v2::core::Metadata& metadata) const {
   const auto& value = Envoy::Config::Metadata::metadataValue(metadata, matcher_.filter(), path_);
-  return value_matcher_ && value_matcher_->match(value);
+  if (present_matcher_ && value.kind_case() != ProtobufWkt::Value::KIND_NOT_SET) {
+    return true;
+  }
+  switch (value.kind_case()) {
+  case ProtobufWkt::Value::kNullValue:
+    return null_matcher_;
+  case ProtobufWkt::Value::kNumberValue:
+    return double_matcher_.has_value() && double_matcher_->match(value.number_value());
+  case ProtobufWkt::Value::kStringValue:
+    return string_matcher_.has_value() && string_matcher_->match(value.string_value());
+  case ProtobufWkt::Value::kBoolValue:
+    return (bool_matcher_.has_value() && *bool_matcher_ == value.bool_value());
+  case ProtobufWkt::Value::kListValue:
+  case ProtobufWkt::Value::kStructValue:
+  case ProtobufWkt::Value::KIND_NOT_SET:
+    return false;
+  default:
+    NOT_REACHED_GCOVR_EXCL_LINE;
+  }
 }
 
 } // namespace Matchers

@@ -2,14 +2,13 @@
 #include <memory>
 #include <string>
 
-#include "envoy/stats/scope.h"
-
 #include "common/buffer/buffer_impl.h"
 #include "common/event/dispatcher_impl.h"
 #include "common/network/listen_socket_impl.h"
 #include "common/network/listener_impl.h"
 #include "common/network/raw_buffer_socket.h"
 #include "common/network/utility.h"
+#include "common/stats/stats_impl.h"
 
 #include "server/connection_handler_impl.h"
 
@@ -22,20 +21,19 @@
 #include "test/test_common/environment.h"
 #include "test/test_common/network_utility.h"
 #include "test/test_common/printers.h"
-#include "test/test_common/test_time.h"
 #include "test/test_common/threadsafe_singleton_injector.h"
 #include "test/test_common/utility.h"
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::AnyNumber;
 using testing::AtLeast;
 using testing::InSequence;
 using testing::Invoke;
 using testing::NiceMock;
 using testing::Return;
+using testing::_;
 
 namespace Envoy {
 namespace Extensions {
@@ -50,8 +48,7 @@ class ProxyProtocolTest : public testing::TestWithParam<Network::Address::IpVers
                           protected Logger::Loggable<Logger::Id::main> {
 public:
   ProxyProtocolTest()
-      : dispatcher_(test_time_.timeSource()),
-        socket_(Network::Test::getCanonicalLoopbackAddress(GetParam()), nullptr, true),
+      : socket_(Network::Test::getCanonicalLoopbackAddress(GetParam()), nullptr, true),
         connection_handler_(new Server::ConnectionHandlerImpl(ENVOY_LOGGER(), dispatcher_)),
         name_("proxy"), filter_chain_(Network::Test::createEmptyFilterChainWithRawBufferSockets()) {
 
@@ -144,7 +141,6 @@ public:
     EXPECT_EQ(stats_store_.counter("downstream_cx_proxy_proto_error").value(), 1);
   }
 
-  DangerousDeprecatedTestTime test_time_;
   Event::DispatcherImpl dispatcher_;
   Network::TcpListenSocket socket_;
   Stats::IsolatedStoreImpl stats_store_;
@@ -260,27 +256,20 @@ TEST_P(ProxyProtocolTest, errorRecv_2) {
                                 'r',  'e',  ' ',  'd',  'a',  't',  'a'};
   Api::MockOsSysCalls os_sys_calls;
   TestThreadsafeSingletonInjector<Api::OsSysCallsImpl> os_calls(&os_sys_calls);
-  EXPECT_CALL(os_sys_calls, recv(_, _, _, _))
-      .Times(AnyNumber())
-      .WillOnce(Return(Api::SysCallSizeResult{-1, 0}));
+  EXPECT_CALL(os_sys_calls, recv(_, _, _, _)).Times(AnyNumber()).WillOnce(Return((errno = 0, -1)));
   EXPECT_CALL(os_sys_calls, ioctl(_, _, _))
       .Times(AnyNumber())
       .WillRepeatedly(Invoke([](int fd, unsigned long int request, void* argp) {
-        const int rc = ::ioctl(fd, request, argp);
-        return Api::SysCallIntResult{rc, errno};
+        return ::ioctl(fd, request, argp);
       }));
   EXPECT_CALL(os_sys_calls, writev(_, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, const struct iovec* iov, int iovcnt) {
-        const ssize_t rc = ::writev(fd, iov, iovcnt);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
+      .WillRepeatedly(Invoke(
+          [](int fd, const struct iovec* iov, int iovcnt) { return ::writev(fd, iov, iovcnt); }));
   EXPECT_CALL(os_sys_calls, readv(_, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, const struct iovec* iov, int iovcnt) {
-        const ssize_t rc = ::readv(fd, iov, iovcnt);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
+      .WillRepeatedly(Invoke(
+          [](int fd, const struct iovec* iov, int iovcnt) { return ::readv(fd, iov, iovcnt); }));
 
   connect(false);
   write(buffer, sizeof(buffer));
@@ -297,19 +286,15 @@ TEST_P(ProxyProtocolTest, errorFIONREAD_1) {
                                 'r',  'e',  ' ',  'd',  'a',  't',  'a'};
   Api::MockOsSysCalls os_sys_calls;
   TestThreadsafeSingletonInjector<Api::OsSysCallsImpl> os_calls(&os_sys_calls);
-  EXPECT_CALL(os_sys_calls, ioctl(_, FIONREAD, _)).WillOnce(Return(Api::SysCallIntResult{-1, 0}));
+  EXPECT_CALL(os_sys_calls, ioctl(_, FIONREAD, _)).WillOnce(Return(-1));
   EXPECT_CALL(os_sys_calls, writev(_, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, const struct iovec* iov, int iovcnt) {
-        const ssize_t rc = ::writev(fd, iov, iovcnt);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
+      .WillRepeatedly(Invoke(
+          [](int fd, const struct iovec* iov, int iovcnt) { return ::writev(fd, iov, iovcnt); }));
   EXPECT_CALL(os_sys_calls, readv(_, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, const struct iovec* iov, int iovcnt) {
-        const ssize_t rc = ::readv(fd, iov, iovcnt);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
+      .WillRepeatedly(Invoke(
+          [](int fd, const struct iovec* iov, int iovcnt) { return ::readv(fd, iov, iovcnt); }));
 
   connect(false);
   write(buffer, sizeof(buffer));
@@ -495,31 +480,25 @@ TEST_P(ProxyProtocolTest, v2ParseExtensionsIoctlError) {
       .WillRepeatedly(Invoke([](int fd, unsigned long int request, void* argp) {
         int x = ::ioctl(fd, request, argp);
         if (x == 0 && *static_cast<int*>(argp) == sizeof(tlv)) {
-          return Api::SysCallIntResult{-1, errno};
+          return -1;
         } else {
-          return Api::SysCallIntResult{x, errno};
+          return x;
         }
       }));
 
   EXPECT_CALL(os_sys_calls, recv(_, _, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, void* buf, size_t len, int flags) {
-        const ssize_t rc = ::recv(fd, buf, len, flags);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
+      .WillRepeatedly(Invoke(
+          [](int fd, void* buf, size_t len, int flags) { return ::recv(fd, buf, len, flags); }));
 
   EXPECT_CALL(os_sys_calls, writev(_, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, const struct iovec* iov, int iovcnt) {
-        const ssize_t rc = ::writev(fd, iov, iovcnt);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
+      .WillRepeatedly(Invoke(
+          [](int fd, const struct iovec* iov, int iovcnt) { return ::writev(fd, iov, iovcnt); }));
   EXPECT_CALL(os_sys_calls, readv(_, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, const struct iovec* iov, int iovcnt) {
-        const ssize_t rc = ::readv(fd, iov, iovcnt);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
+      .WillRepeatedly(Invoke(
+          [](int fd, const struct iovec* iov, int iovcnt) { return ::readv(fd, iov, iovcnt); }));
 
   connect(false);
   write(buffer, sizeof(buffer));
@@ -623,32 +602,23 @@ TEST_P(ProxyProtocolTest, v2Fragmented3Error) {
 
   EXPECT_CALL(os_sys_calls, recv(_, _, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, void* buf, size_t len, int flags) {
-        const ssize_t rc = ::recv(fd, buf, len, flags);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
-  EXPECT_CALL(os_sys_calls, recv(_, _, 1, _))
-      .Times(AnyNumber())
-      .WillOnce(Return(Api::SysCallSizeResult{-1, 0}));
+      .WillRepeatedly(Invoke(
+          [](int fd, void* buf, size_t len, int flags) { return ::recv(fd, buf, len, flags); }));
+  EXPECT_CALL(os_sys_calls, recv(_, _, 1, _)).Times(AnyNumber()).WillOnce(Return(-1));
 
   EXPECT_CALL(os_sys_calls, ioctl(_, _, _))
       .Times(AnyNumber())
       .WillRepeatedly(Invoke([](int fd, unsigned long int request, void* argp) {
-        const int rc = ::ioctl(fd, request, argp);
-        return Api::SysCallIntResult{rc, errno};
+        return ::ioctl(fd, request, argp);
       }));
   EXPECT_CALL(os_sys_calls, writev(_, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, const struct iovec* iov, int iovcnt) {
-        const ssize_t rc = ::writev(fd, iov, iovcnt);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
+      .WillRepeatedly(Invoke(
+          [](int fd, const struct iovec* iov, int iovcnt) { return ::writev(fd, iov, iovcnt); }));
   EXPECT_CALL(os_sys_calls, readv(_, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, const struct iovec* iov, int iovcnt) {
-        const ssize_t rc = ::readv(fd, iov, iovcnt);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
+      .WillRepeatedly(Invoke(
+          [](int fd, const struct iovec* iov, int iovcnt) { return ::readv(fd, iov, iovcnt); }));
 
   connect(false);
   write(buffer, 17);
@@ -669,32 +639,23 @@ TEST_P(ProxyProtocolTest, v2Fragmented4Error) {
 
   EXPECT_CALL(os_sys_calls, recv(_, _, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, void* buf, size_t len, int flags) {
-        const ssize_t rc = ::recv(fd, buf, len, flags);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
-  EXPECT_CALL(os_sys_calls, recv(_, _, 4, _))
-      .Times(AnyNumber())
-      .WillOnce(Return(Api::SysCallSizeResult{-1, 0}));
+      .WillRepeatedly(Invoke(
+          [](int fd, void* buf, size_t len, int flags) { return ::recv(fd, buf, len, flags); }));
+  EXPECT_CALL(os_sys_calls, recv(_, _, 4, _)).Times(AnyNumber()).WillOnce(Return(-1));
 
   EXPECT_CALL(os_sys_calls, ioctl(_, _, _))
       .Times(AnyNumber())
       .WillRepeatedly(Invoke([](int fd, unsigned long int request, void* argp) {
-        const int rc = ::ioctl(fd, request, argp);
-        return Api::SysCallIntResult{rc, errno};
+        return ::ioctl(fd, request, argp);
       }));
   EXPECT_CALL(os_sys_calls, writev(_, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, const struct iovec* iov, int iovcnt) {
-        const ssize_t rc = ::writev(fd, iov, iovcnt);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
+      .WillRepeatedly(Invoke(
+          [](int fd, const struct iovec* iov, int iovcnt) { return ::writev(fd, iov, iovcnt); }));
   EXPECT_CALL(os_sys_calls, readv(_, _, _))
       .Times(AnyNumber())
-      .WillRepeatedly(Invoke([](int fd, const struct iovec* iov, int iovcnt) {
-        const ssize_t rc = ::readv(fd, iov, iovcnt);
-        return Api::SysCallSizeResult{rc, errno};
-      }));
+      .WillRepeatedly(Invoke(
+          [](int fd, const struct iovec* iov, int iovcnt) { return ::readv(fd, iov, iovcnt); }));
 
   connect(false);
   write(buffer, 10);
@@ -863,8 +824,7 @@ class WildcardProxyProtocolTest : public testing::TestWithParam<Network::Address
                                   protected Logger::Loggable<Logger::Id::main> {
 public:
   WildcardProxyProtocolTest()
-      : dispatcher_(test_time_.timeSource()),
-        socket_(Network::Test::getAnyAddress(GetParam()), nullptr, true),
+      : socket_(Network::Test::getAnyAddress(GetParam()), nullptr, true),
         local_dst_address_(Network::Utility::getAddressWithPort(
             *Network::Test::getCanonicalLoopbackAddress(GetParam()),
             socket_.localAddress()->ip()->port())),
@@ -943,7 +903,6 @@ public:
     dispatcher_.run(Event::Dispatcher::RunType::Block);
   }
 
-  DangerousDeprecatedTestTime test_time_;
   Event::DispatcherImpl dispatcher_;
   Network::TcpListenSocket socket_;
   Network::Address::InstanceConstSharedPtr local_dst_address_;

@@ -50,10 +50,9 @@ void MainImpl::initialize(const envoy::config::bootstrap::v2::Bootstrap& bootstr
   ENVOY_LOG(info, "loading {} static secret(s)", secrets.size());
   for (ssize_t i = 0; i < secrets.size(); i++) {
     ENVOY_LOG(debug, "static secret #{}: {}", i, secrets[i].name());
-    server.secretManager().addStaticSecret(secrets[i]);
+    server.secretManager().addOrUpdateSecret(secrets[i]);
   }
 
-  ENVOY_LOG(info, "loading {} cluster(s)", bootstrap.static_resources().clusters().size());
   cluster_manager_ = cluster_manager_factory.clusterManagerFromProto(
       bootstrap, server.stats(), server.threadLocal(), server.runtime(), server.random(),
       server.localInfo(), server.accessLogManager(), server.admin());

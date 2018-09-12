@@ -5,8 +5,8 @@
 #include "common/http/utility.h"
 #include "common/singleton/const_singleton.h"
 
-using ::envoy::config::filter::http::jwt_authn::v2alpha::JwtAuthentication;
 using ::Envoy::Http::LowerCaseString;
+using ::envoy::config::filter::http::jwt_authn::v2alpha::JwtAuthentication;
 
 namespace Envoy {
 namespace Extensions {

@@ -7,8 +7,6 @@
 #include "common/common/assert.h"
 #include "common/common/macros.h"
 
-#include "extensions/filters/network/thrift_proxy/app_exception_impl.h"
-
 namespace Envoy {
 namespace Extensions {
 namespace NetworkFilters {
@@ -16,14 +14,18 @@ namespace ThriftProxy {
 
 // MessageBegin -> StructBegin
 DecoderStateMachine::DecoderStatus DecoderStateMachine::messageBegin(Buffer::Instance& buffer) {
-  if (!proto_.readMessageBegin(buffer, *metadata_)) {
+  std::string message_name;
+  MessageType msg_type;
+  int32_t seq_id;
+  if (!proto_.readMessageBegin(buffer, message_name, msg_type, seq_id)) {
     return DecoderStatus(ProtocolState::WaitForData);
   }
 
   stack_.clear();
   stack_.emplace_back(Frame(ProtocolState::MessageEnd));
 
-  return DecoderStatus(ProtocolState::StructBegin, handler_.messageBegin(metadata_));
+  return DecoderStatus(ProtocolState::StructBegin,
+                       filter_.messageBegin(absl::string_view(message_name), msg_type, seq_id));
 }
 
 // MessageEnd -> Done
@@ -32,7 +34,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::messageEnd(Buffer::Insta
     return DecoderStatus(ProtocolState::WaitForData);
   }
 
-  return DecoderStatus(ProtocolState::Done, handler_.messageEnd());
+  return DecoderStatus(ProtocolState::Done, filter_.messageEnd());
 }
 
 // StructBegin -> FieldBegin
@@ -42,7 +44,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::structBegin(Buffer::Inst
     return DecoderStatus(ProtocolState::WaitForData);
   }
 
-  return DecoderStatus(ProtocolState::FieldBegin, handler_.structBegin(absl::string_view(name)));
+  return DecoderStatus(ProtocolState::FieldBegin, filter_.structBegin(absl::string_view(name)));
 }
 
 // StructEnd -> stack's return state
@@ -52,7 +54,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::structEnd(Buffer::Instan
   }
 
   ProtocolState next_state = popReturnState();
-  return DecoderStatus(next_state, handler_.structEnd());
+  return DecoderStatus(next_state, filter_.structEnd());
 }
 
 // FieldBegin -> FieldValue, or
@@ -66,13 +68,13 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::fieldBegin(Buffer::Insta
   }
 
   if (field_type == FieldType::Stop) {
-    return DecoderStatus(ProtocolState::StructEnd, FilterStatus::Continue);
+    return DecoderStatus(ProtocolState::StructEnd, ThriftFilters::FilterStatus::Continue);
   }
 
   stack_.emplace_back(Frame(ProtocolState::FieldEnd, field_type));
 
   return DecoderStatus(ProtocolState::FieldValue,
-                       handler_.fieldBegin(absl::string_view(name), field_type, field_id));
+                       filter_.fieldBegin(absl::string_view(name), field_type, field_id));
 }
 
 // FieldValue -> FieldEnd (via stack return state)
@@ -91,7 +93,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::fieldEnd(Buffer::Instanc
 
   popReturnState();
 
-  return DecoderStatus(ProtocolState::FieldBegin, handler_.fieldEnd());
+  return DecoderStatus(ProtocolState::FieldBegin, filter_.fieldEnd());
 }
 
 // ListBegin -> ListValue
@@ -104,7 +106,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::listBegin(Buffer::Instan
 
   stack_.emplace_back(Frame(ProtocolState::ListEnd, elem_type, size));
 
-  return DecoderStatus(ProtocolState::ListValue, handler_.listBegin(elem_type, size));
+  return DecoderStatus(ProtocolState::ListValue, filter_.listBegin(elem_type, size));
 }
 
 // ListValue -> ListValue, ListBegin, MapBegin, SetBegin, StructBegin (depending on value type), or
@@ -113,7 +115,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::listValue(Buffer::Instan
   ASSERT(!stack_.empty());
   Frame& frame = stack_.back();
   if (frame.remaining_ == 0) {
-    return DecoderStatus(popReturnState(), FilterStatus::Continue);
+    return DecoderStatus(popReturnState(), ThriftFilters::FilterStatus::Continue);
   }
   frame.remaining_--;
 
@@ -127,7 +129,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::listEnd(Buffer::Instance
   }
 
   ProtocolState next_state = popReturnState();
-  return DecoderStatus(next_state, handler_.listEnd());
+  return DecoderStatus(next_state, filter_.listEnd());
 }
 
 // MapBegin -> MapKey
@@ -140,7 +142,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::mapBegin(Buffer::Instanc
 
   stack_.emplace_back(Frame(ProtocolState::MapEnd, key_type, value_type, size));
 
-  return DecoderStatus(ProtocolState::MapKey, handler_.mapBegin(key_type, value_type, size));
+  return DecoderStatus(ProtocolState::MapKey, filter_.mapBegin(key_type, value_type, size));
 }
 
 // MapKey -> MapValue, ListBegin, MapBegin, SetBegin, StructBegin (depending on key type), or
@@ -149,7 +151,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::mapKey(Buffer::Instance&
   ASSERT(!stack_.empty());
   Frame& frame = stack_.back();
   if (frame.remaining_ == 0) {
-    return DecoderStatus(popReturnState(), FilterStatus::Continue);
+    return DecoderStatus(popReturnState(), ThriftFilters::FilterStatus::Continue);
   }
 
   return handleValue(buffer, frame.elem_type_, ProtocolState::MapValue);
@@ -173,7 +175,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::mapEnd(Buffer::Instance&
   }
 
   ProtocolState next_state = popReturnState();
-  return DecoderStatus(next_state, handler_.mapEnd());
+  return DecoderStatus(next_state, filter_.mapEnd());
 }
 
 // SetBegin -> SetValue
@@ -186,7 +188,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::setBegin(Buffer::Instanc
 
   stack_.emplace_back(Frame(ProtocolState::SetEnd, elem_type, size));
 
-  return DecoderStatus(ProtocolState::SetValue, handler_.setBegin(elem_type, size));
+  return DecoderStatus(ProtocolState::SetValue, filter_.setBegin(elem_type, size));
 }
 
 // SetValue -> SetValue, ListBegin, MapBegin, SetBegin, StructBegin (depending on value type), or
@@ -195,7 +197,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::setValue(Buffer::Instanc
   ASSERT(!stack_.empty());
   Frame& frame = stack_.back();
   if (frame.remaining_ == 0) {
-    return DecoderStatus(popReturnState(), FilterStatus::Continue);
+    return DecoderStatus(popReturnState(), ThriftFilters::FilterStatus::Continue);
   }
   frame.remaining_--;
 
@@ -209,7 +211,7 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::setEnd(Buffer::Instance&
   }
 
   ProtocolState next_state = popReturnState();
-  return DecoderStatus(next_state, handler_.setEnd());
+  return DecoderStatus(next_state, filter_.setEnd());
 }
 
 DecoderStateMachine::DecoderStatus DecoderStateMachine::handleValue(Buffer::Instance& buffer,
@@ -219,64 +221,64 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::handleValue(Buffer::Inst
   case FieldType::Bool: {
     bool value{};
     if (proto_.readBool(buffer, value)) {
-      return DecoderStatus(return_state, handler_.boolValue(value));
+      return DecoderStatus(return_state, filter_.boolValue(value));
     }
     break;
   }
   case FieldType::Byte: {
     uint8_t value{};
     if (proto_.readByte(buffer, value)) {
-      return DecoderStatus(return_state, handler_.byteValue(value));
+      return DecoderStatus(return_state, filter_.byteValue(value));
     }
     break;
   }
   case FieldType::I16: {
     int16_t value{};
     if (proto_.readInt16(buffer, value)) {
-      return DecoderStatus(return_state, handler_.int16Value(value));
+      return DecoderStatus(return_state, filter_.int16Value(value));
     }
     break;
   }
   case FieldType::I32: {
     int32_t value{};
     if (proto_.readInt32(buffer, value)) {
-      return DecoderStatus(return_state, handler_.int32Value(value));
+      return DecoderStatus(return_state, filter_.int32Value(value));
     }
     break;
   }
   case FieldType::I64: {
     int64_t value{};
     if (proto_.readInt64(buffer, value)) {
-      return DecoderStatus(return_state, handler_.int64Value(value));
+      return DecoderStatus(return_state, filter_.int64Value(value));
     }
     break;
   }
   case FieldType::Double: {
     double value{};
     if (proto_.readDouble(buffer, value)) {
-      return DecoderStatus(return_state, handler_.doubleValue(value));
+      return DecoderStatus(return_state, filter_.doubleValue(value));
     }
     break;
   }
   case FieldType::String: {
     std::string value;
     if (proto_.readString(buffer, value)) {
-      return DecoderStatus(return_state, handler_.stringValue(value));
+      return DecoderStatus(return_state, filter_.stringValue(value));
     }
     break;
   }
   case FieldType::Struct:
     stack_.emplace_back(Frame(return_state));
-    return DecoderStatus(ProtocolState::StructBegin, FilterStatus::Continue);
+    return DecoderStatus(ProtocolState::StructBegin, ThriftFilters::FilterStatus::Continue);
   case FieldType::Map:
     stack_.emplace_back(Frame(return_state));
-    return DecoderStatus(ProtocolState::MapBegin, FilterStatus::Continue);
+    return DecoderStatus(ProtocolState::MapBegin, ThriftFilters::FilterStatus::Continue);
   case FieldType::List:
     stack_.emplace_back(Frame(return_state));
-    return DecoderStatus(ProtocolState::ListBegin, FilterStatus::Continue);
+    return DecoderStatus(ProtocolState::ListBegin, ThriftFilters::FilterStatus::Continue);
   case FieldType::Set:
     stack_.emplace_back(Frame(return_state));
-    return DecoderStatus(ProtocolState::SetBegin, FilterStatus::Continue);
+    return DecoderStatus(ProtocolState::SetBegin, ThriftFilters::FilterStatus::Continue);
   default:
     throw EnvoyException(fmt::format("unknown field type {}", static_cast<int8_t>(elem_type)));
   }
@@ -342,7 +344,7 @@ ProtocolState DecoderStateMachine::run(Buffer::Instance& buffer) {
     state_ = s.next_state_;
 
     ASSERT(s.filter_status_.has_value());
-    if (s.filter_status_.value() == FilterStatus::StopIteration) {
+    if (s.filter_status_.value() == ThriftFilters::FilterStatus::StopIteration) {
       return ProtocolState::StopIteration;
     }
   }
@@ -360,7 +362,7 @@ void Decoder::complete() {
   frame_ended_ = false;
 }
 
-FilterStatus Decoder::onData(Buffer::Instance& data, bool& buffer_underflow) {
+ThriftFilters::FilterStatus Decoder::onData(Buffer::Instance& data, bool& buffer_underflow) {
   ENVOY_LOG(debug, "thrift: {} bytes available", data.length());
   buffer_underflow = false;
 
@@ -368,48 +370,25 @@ FilterStatus Decoder::onData(Buffer::Instance& data, bool& buffer_underflow) {
     // Continuation after filter stopped iteration on transportComplete callback.
     complete();
     buffer_underflow = (data.length() == 0);
-    return FilterStatus::Continue;
+    return ThriftFilters::FilterStatus::Continue;
   }
 
   if (!frame_started_) {
     // Look for start of next frame.
-    if (!metadata_) {
-      metadata_ = std::make_shared<MessageMetadata>();
-    }
-
-    if (!transport_->decodeFrameStart(data, *metadata_)) {
+    absl::optional<uint32_t> size{};
+    if (!transport_->decodeFrameStart(data, size)) {
       ENVOY_LOG(debug, "thrift: need more data for {} transport start", transport_->name());
       buffer_underflow = true;
-      return FilterStatus::Continue;
+      return ThriftFilters::FilterStatus::Continue;
     }
     ENVOY_LOG(debug, "thrift: {} transport started", transport_->name());
 
-    if (metadata_->hasProtocol()) {
-      if (protocol_->type() == ProtocolType::Auto) {
-        protocol_->setType(metadata_->protocol());
-        ENVOY_LOG(debug, "thrift: {} transport forced {} protocol", transport_->name(),
-                  protocol_->name());
-      } else if (metadata_->protocol() != protocol_->type()) {
-        throw EnvoyException(fmt::format("transport reports protocol {}, but configured for {}",
-                                         ProtocolNames::get().fromType(metadata_->protocol()),
-                                         ProtocolNames::get().fromType(protocol_->type())));
-      }
-    }
-    if (metadata_->hasAppException()) {
-      AppExceptionType ex_type = metadata_->appExceptionType();
-      std::string ex_msg = metadata_->appExceptionMessage();
-      // Force new metadata if we get called again.
-      metadata_.reset();
-      throw AppException(ex_type, ex_msg);
-    }
-
-    request_ = std::make_unique<ActiveRequest>(callbacks_.newDecoderEventHandler());
+    request_ = std::make_unique<ActiveRequest>(callbacks_.newDecoderFilter());
     frame_started_ = true;
-    state_machine_ =
-        std::make_unique<DecoderStateMachine>(*protocol_, metadata_, request_->handler_);
+    state_machine_ = std::make_unique<DecoderStateMachine>(*protocol_, request_->filter_);
 
-    if (request_->handler_.transportBegin(metadata_) == FilterStatus::StopIteration) {
-      return FilterStatus::StopIteration;
+    if (request_->filter_.transportBegin(size) == ThriftFilters::FilterStatus::StopIteration) {
+      return ThriftFilters::FilterStatus::StopIteration;
     }
   }
 
@@ -422,10 +401,10 @@ FilterStatus Decoder::onData(Buffer::Instance& data, bool& buffer_underflow) {
   if (rv == ProtocolState::WaitForData) {
     ENVOY_LOG(debug, "thrift: wait for data");
     buffer_underflow = true;
-    return FilterStatus::Continue;
+    return ThriftFilters::FilterStatus::Continue;
   } else if (rv == ProtocolState::StopIteration) {
     ENVOY_LOG(debug, "thrift: wait for continuation");
-    return FilterStatus::StopIteration;
+    return ThriftFilters::FilterStatus::StopIteration;
   }
 
   ASSERT(rv == ProtocolState::Done);
@@ -434,21 +413,20 @@ FilterStatus Decoder::onData(Buffer::Instance& data, bool& buffer_underflow) {
   if (!transport_->decodeFrameEnd(data)) {
     ENVOY_LOG(debug, "thrift: need more data for {} transport end", transport_->name());
     buffer_underflow = true;
-    return FilterStatus::Continue;
+    return ThriftFilters::FilterStatus::Continue;
   }
 
   frame_ended_ = true;
-  metadata_.reset();
 
   ENVOY_LOG(debug, "thrift: {} transport ended", transport_->name());
-  if (request_->handler_.transportEnd() == FilterStatus::StopIteration) {
-    return FilterStatus::StopIteration;
+  if (request_->filter_.transportEnd() == ThriftFilters::FilterStatus::StopIteration) {
+    return ThriftFilters::FilterStatus::StopIteration;
   }
 
   // Reset for next frame.
   complete();
   buffer_underflow = (data.length() == 0);
-  return FilterStatus::Continue;
+  return ThriftFilters::FilterStatus::Continue;
 }
 
 } // namespace ThriftProxy

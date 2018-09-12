@@ -3,17 +3,18 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::Invoke;
 using testing::NiceMock;
 using testing::Return;
 using testing::ReturnPointee;
 using testing::ReturnRef;
+using testing::_;
 
 namespace Envoy {
 namespace Stats {
 
 MockCounter::MockCounter() {
+  ON_CALL(*this, name()).WillByDefault(ReturnRef(name_));
   ON_CALL(*this, tagExtractedName()).WillByDefault(ReturnRef(name_));
   ON_CALL(*this, tags()).WillByDefault(ReturnRef(tags_));
   ON_CALL(*this, used()).WillByDefault(ReturnPointee(&used_));
@@ -23,6 +24,7 @@ MockCounter::MockCounter() {
 MockCounter::~MockCounter() {}
 
 MockGauge::MockGauge() {
+  ON_CALL(*this, name()).WillByDefault(ReturnRef(name_));
   ON_CALL(*this, tagExtractedName()).WillByDefault(ReturnRef(name_));
   ON_CALL(*this, tags()).WillByDefault(ReturnRef(tags_));
   ON_CALL(*this, used()).WillByDefault(ReturnPointee(&used_));

@@ -5,7 +5,6 @@
 
 #include "envoy/grpc/async_client.h"
 #include "envoy/grpc/async_client_manager.h"
-#include "envoy/stats/scope.h"
 
 #include "gmock/gmock.h"
 

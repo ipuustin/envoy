@@ -3,9 +3,8 @@ syntax = "proto3";
 package envoy.config.filter.http.fault.v2;
 option go_package = "v2";
 
-import "envoy/api/v2/route/route.proto";
 import "envoy/config/filter/fault/v2/fault.proto";
-import "envoy/type/percent.proto";
+import "envoy/api/v2/route/route.proto";
 
 import "validate/validate.proto";
 
@@ -15,11 +14,7 @@ import "validate/validate.proto";
 message FaultAbort {
   // An integer between 0-100 indicating the percentage of requests/operations/connections
   // that will be aborted with the error code provided.
-  //
-  // .. attention::
-  //
-  //   Use of integer `percent` value is deprecated. Use fractional `percentage` field instead.
-  uint32 percent = 1 [(validate.rules).uint32.lte = 100, deprecated = true];
+  uint32 percent = 1 [(validate.rules).uint32.lte = 100];
 
   oneof error_type {
     option (validate.required) = true;
@@ -27,10 +22,6 @@ message FaultAbort {
     // HTTP status code to use to abort the HTTP request.
     uint32 http_status = 2 [(validate.rules).uint32 = {gte: 200, lt: 600}];
   }
-
-  // The percentage of requests/operations/connections that will be aborted with the error code
-  // provided.
-  envoy.type.FractionalPercent percentage = 3;
 }
 
 message HTTPFault {

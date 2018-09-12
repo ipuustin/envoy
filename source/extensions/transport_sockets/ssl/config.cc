@@ -16,11 +16,12 @@ namespace SslTransport {
 Network::TransportSocketFactoryPtr UpstreamSslSocketFactory::createTransportSocketFactory(
     const Protobuf::Message& message,
     Server::Configuration::TransportSocketFactoryContext& context) {
-  auto client_config = std::make_unique<Ssl::ClientContextConfigImpl>(
-      MessageUtil::downcastAndValidate<const envoy::api::v2::auth::UpstreamTlsContext&>(message),
-      context);
   return std::make_unique<Ssl::ClientSslSocketFactory>(
-      std::move(client_config), context.sslContextManager(), context.statsScope());
+      Ssl::ClientContextConfigImpl(
+          MessageUtil::downcastAndValidate<const envoy::api::v2::auth::UpstreamTlsContext&>(
+              message),
+          context.secretManager()),
+      context.sslContextManager(), context.statsScope());
 }
 
 ProtobufTypes::MessagePtr UpstreamSslSocketFactory::createEmptyConfigProto() {
@@ -34,11 +35,12 @@ static Registry::RegisterFactory<UpstreamSslSocketFactory,
 Network::TransportSocketFactoryPtr DownstreamSslSocketFactory::createTransportSocketFactory(
     const Protobuf::Message& message, Server::Configuration::TransportSocketFactoryContext& context,
     const std::vector<std::string>& server_names) {
-  auto server_config = std::make_unique<Ssl::ServerContextConfigImpl>(
-      MessageUtil::downcastAndValidate<const envoy::api::v2::auth::DownstreamTlsContext&>(message),
-      context);
   return std::make_unique<Ssl::ServerSslSocketFactory>(
-      std::move(server_config), context.sslContextManager(), context.statsScope(), server_names);
+      Ssl::ServerContextConfigImpl(
+          MessageUtil::downcastAndValidate<const envoy::api::v2::auth::DownstreamTlsContext&>(
+              message),
+          context.secretManager()),
+      context.sslContextManager(), context.statsScope(), server_names);
 }
 
 ProtobufTypes::MessagePtr DownstreamSslSocketFactory::createEmptyConfigProto() {

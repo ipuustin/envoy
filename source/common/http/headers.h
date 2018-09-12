@@ -76,7 +76,6 @@ public:
   const LowerCaseString Origin{"origin"};
   const LowerCaseString OtSpanContext{"x-ot-span-context"};
   const LowerCaseString Path{":path"};
-  const LowerCaseString Protocol{":protocol"};
   const LowerCaseString ProxyConnection{"proxy-connection"};
   const LowerCaseString Referer{"referer"};
   const LowerCaseString RequestId{"x-request-id"};
@@ -159,7 +158,6 @@ public:
   } ExpectValues;
 
   struct {
-    const std::string Connect{"CONNECT"};
     const std::string Get{"GET"};
     const std::string Head{"HEAD"};
     const std::string Post{"POST"};

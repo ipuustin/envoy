@@ -7,19 +7,18 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::Invoke;
 using testing::Return;
 using testing::ReturnNew;
 using testing::ReturnPointee;
 using testing::ReturnRef;
 using testing::SaveArg;
+using testing::_;
 
 namespace Envoy {
 namespace Server {
 
 MockOptions::MockOptions(const std::string& config_path) : config_path_(config_path) {
-  ON_CALL(*this, concurrency()).WillByDefault(ReturnPointee(&concurrency_));
   ON_CALL(*this, configPath()).WillByDefault(ReturnRef(config_path_));
   ON_CALL(*this, configYaml()).WillByDefault(ReturnRef(config_yaml_));
   ON_CALL(*this, v2ConfigOnly()).WillByDefault(Invoke([this] { return v2_config_only_; }));
@@ -27,11 +26,9 @@ MockOptions::MockOptions(const std::string& config_path) : config_path_(config_p
   ON_CALL(*this, serviceClusterName()).WillByDefault(ReturnRef(service_cluster_name_));
   ON_CALL(*this, serviceNodeName()).WillByDefault(ReturnRef(service_node_name_));
   ON_CALL(*this, serviceZone()).WillByDefault(ReturnRef(service_zone_name_));
-  ON_CALL(*this, logLevel()).WillByDefault(Return(log_level_));
   ON_CALL(*this, logPath()).WillByDefault(ReturnRef(log_path_));
   ON_CALL(*this, maxStats()).WillByDefault(Return(1000));
   ON_CALL(*this, statsOptions()).WillByDefault(ReturnRef(stats_options_));
-  ON_CALL(*this, restartEpoch()).WillByDefault(ReturnPointee(&hot_restart_epoch_));
   ON_CALL(*this, hotRestartDisabled()).WillByDefault(ReturnPointee(&hot_restart_disabled_));
 }
 MockOptions::~MockOptions() {}
@@ -90,7 +87,6 @@ MockListenerManager::MockListenerManager() {}
 MockListenerManager::~MockListenerManager() {}
 
 MockWorkerFactory::MockWorkerFactory() {}
-
 MockWorkerFactory::~MockWorkerFactory() {}
 
 MockWorker::MockWorker() {
@@ -132,8 +128,6 @@ MockInstance::MockInstance()
   ON_CALL(*this, initManager()).WillByDefault(ReturnRef(init_manager_));
   ON_CALL(*this, listenerManager()).WillByDefault(ReturnRef(listener_manager_));
   ON_CALL(*this, singletonManager()).WillByDefault(ReturnRef(*singleton_manager_));
-  ON_CALL(*this, overloadManager()).WillByDefault(ReturnRef(overload_manager_));
-  ON_CALL(*this, timeSource()).WillByDefault(ReturnRef(test_time_.timeSource()));
 }
 
 MockInstance::~MockInstance() {}
@@ -163,14 +157,12 @@ MockFactoryContext::MockFactoryContext() : singleton_manager_(new Singleton::Man
   ON_CALL(*this, threadLocal()).WillByDefault(ReturnRef(thread_local_));
   ON_CALL(*this, admin()).WillByDefault(ReturnRef(admin_));
   ON_CALL(*this, listenerScope()).WillByDefault(ReturnRef(listener_scope_));
-  ON_CALL(*this, timeSource()).WillByDefault(ReturnRef(time_source_));
+  ON_CALL(*this, systemTimeSource()).WillByDefault(ReturnRef(system_time_source_));
 }
 
 MockFactoryContext::~MockFactoryContext() {}
 
-MockTransportSocketFactoryContext::MockTransportSocketFactoryContext()
-    : secret_manager_(new Secret::SecretManagerImpl()) {}
-
+MockTransportSocketFactoryContext::MockTransportSocketFactoryContext() {}
 MockTransportSocketFactoryContext::~MockTransportSocketFactoryContext() {}
 
 MockListenerFactoryContext::MockListenerFactoryContext() {}
@@ -186,9 +178,6 @@ MockHealthCheckerFactoryContext::MockHealthCheckerFactoryContext() {
 }
 
 MockHealthCheckerFactoryContext::~MockHealthCheckerFactoryContext() {}
-
-MockAdminStream::MockAdminStream() {}
-MockAdminStream::~MockAdminStream() {}
 
 } // namespace Configuration
 } // namespace Server

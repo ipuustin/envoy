@@ -13,12 +13,12 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::Invoke;
 using testing::Return;
 using testing::ReturnPointee;
 using testing::ReturnRef;
 using testing::SaveArg;
+using testing::_;
 
 namespace Envoy {
 namespace Network {
@@ -31,7 +31,9 @@ MockListenerConfig::MockListenerConfig() {
 }
 MockListenerConfig::~MockListenerConfig() {}
 
-MockConnectionCallbacks::MockConnectionCallbacks() {}
+MockConnectionCallbacks::MockConnectionCallbacks() {
+}
+
 MockConnectionCallbacks::~MockConnectionCallbacks() {}
 
 uint64_t MockConnectionBase::next_id_;
@@ -203,19 +205,11 @@ MockListener::~MockListener() { onDestroy(); }
 MockConnectionHandler::MockConnectionHandler() {}
 MockConnectionHandler::~MockConnectionHandler() {}
 
-MockTransportSocket::MockTransportSocket() {
-  ON_CALL(*this, setTransportSocketCallbacks(_))
-      .WillByDefault(Invoke([&](TransportSocketCallbacks& callbacks) { callbacks_ = &callbacks; }));
-}
+MockTransportSocket::MockTransportSocket() {}
 MockTransportSocket::~MockTransportSocket() {}
 
 MockTransportSocketFactory::MockTransportSocketFactory() {}
 MockTransportSocketFactory::~MockTransportSocketFactory() {}
-
-MockTransportSocketCallbacks::MockTransportSocketCallbacks() {
-  ON_CALL(*this, connection()).WillByDefault(ReturnRef(connection_));
-}
-MockTransportSocketCallbacks::~MockTransportSocketCallbacks() {}
 
 } // namespace Network
 } // namespace Envoy

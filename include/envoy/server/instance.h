@@ -6,7 +6,6 @@
 
 #include "envoy/access_log/access_log.h"
 #include "envoy/api/api.h"
-#include "envoy/event/timer.h"
 #include "envoy/init/init.h"
 #include "envoy/local_info/local_info.h"
 #include "envoy/network/listen_socket.h"
@@ -18,7 +17,6 @@
 #include "envoy/server/hot_restart.h"
 #include "envoy/server/listener_manager.h"
 #include "envoy/server/options.h"
-#include "envoy/server/overload_manager.h"
 #include "envoy/ssl/context_manager.h"
 #include "envoy/thread_local/thread_local.h"
 #include "envoy/tracing/http_tracer.h"
@@ -117,11 +115,6 @@ public:
   virtual ListenerManager& listenerManager() PURE;
 
   /**
-   * @return the server's overload manager.
-   */
-  virtual OverloadManager& overloadManager() PURE;
-
-  /**
    * @return the server's secret manager
    */
   virtual Secret::SecretManager& secretManager() PURE;
@@ -192,12 +185,6 @@ public:
    * @return information about the local environment the server is running in.
    */
   virtual const LocalInfo::LocalInfo& localInfo() PURE;
-
-  /**
-   * @return the time source used for the server.
-   * TODO(#4160): rename this to timeSystem().
-   */
-  virtual Event::TimeSystem& timeSource() PURE;
 
   /**
    * @return the flush interval of stats sinks.

@@ -34,7 +34,7 @@ envoy_cc_test(
         "//source/extensions/transport_sockets/ssl:config",
         "//test/common/grpc:grpc_client_integration_lib",
         "//test/mocks/runtime:runtime_mocks",
-        "//test/mocks/server:server_mocks",
+        "//test/mocks/secret:secret_mocks",
         "//test/test_common:network_utility_lib",
         "//test/test_common:utility_lib",
         "@envoy_api//envoy/api/v2:cds_cc",
@@ -60,7 +60,21 @@ py_binary(
 envoy_proto_library(
     name = "capture_fuzz_proto",
     srcs = [":capture_fuzz.proto"],
-    require_py = 1,
+    external_deps = ["well_known_protos"],
+)
+
+envoy_cc_fuzz_test(
+    name = "h1_capture_fuzz_test",
+    srcs = ["h1_capture_fuzz_test.cc"],
+    corpus = "h1_capture_corpus",
+    deps = [
+        ":capture_fuzz_proto",
+        ":http_integration_lib",
+        "//source/common/common:assert_lib",
+        "//source/common/common:logger_lib",
+        "//test/integration:integration_lib",
+        "//test/test_common:environment_lib",
+    ],
 )
 
 envoy_cc_test(
@@ -68,7 +82,6 @@ envoy_cc_test(
     srcs = ["eds_integration_test.cc"],
     deps = [
         ":http_integration_lib",
-        "//source/common/upstream:load_balancer_lib",
         "//test/config:utility_lib",
         "//test/test_common:network_utility_lib",
         "@envoy_api//envoy/api/v2:eds_cc",
@@ -179,22 +192,6 @@ envoy_cc_test(
 )
 
 envoy_cc_test_library(
-    name = "add_trailers_filter_config_lib",
-    srcs = [
-        "add_trailers_filter.cc",
-        "add_trailers_filter.h",
-        "add_trailers_filter_config.cc",
-        "add_trailers_filter_config.h",
-    ],
-    deps = [
-        "//include/envoy/http:filter_interface",
-        "//include/envoy/registry",
-        "//include/envoy/server:filter_config_interface",
-        "//source/extensions/filters/http/common:empty_http_filter_config_lib",
-    ],
-)
-
-envoy_cc_test_library(
     name = "http_integration_lib",
     srcs = [
         "http_integration.cc",
@@ -203,7 +200,6 @@ envoy_cc_test_library(
         "http_integration.h",
     ],
     deps = [
-        ":add_trailers_filter_config_lib",
         ":integration_lib",
         "//source/extensions/filters/http/router:config",
         "//source/extensions/filters/network/http_connection_manager:config",
@@ -282,7 +278,6 @@ envoy_cc_test_library(
         "//source/common/network:filter_lib",
         "//source/common/network:listen_socket_lib",
         "//source/common/network:utility_lib",
-        "//source/common/stats:isolated_store_lib",
         "//source/common/stats:thread_local_store_lib",
         "//source/common/thread_local:thread_local_lib",
         "//source/common/upstream:upstream_includes",
@@ -301,7 +296,6 @@ envoy_cc_test_library(
         "//test/test_common:environment_lib",
         "//test/test_common:network_utility_lib",
         "//test/test_common:printers_lib",
-        "//test/test_common:test_time_lib",
         "//test/test_common:utility_lib",
     ],
 )
@@ -331,7 +325,7 @@ envoy_cc_test(
         "websocket_integration_test.h",
     ],
     deps = [
-        ":http_protocol_integration_lib",
+        ":http_integration_lib",
         "//source/common/http:header_map_lib",
         "//source/extensions/access_loggers/file:config",
         "//source/extensions/filters/http/buffer:config",
@@ -344,8 +338,6 @@ envoy_cc_test(
     srcs = [
         "echo_integration_test.cc",
     ],
-    # This test must be run in exclusive mode: see comments in AddRemoveListener
-    tags = ["exclusive"],
     deps = [
         ":integration_lib",
         "//source/extensions/filters/network/echo:config",
@@ -386,18 +378,10 @@ envoy_cc_test(
     srcs = ["hds_integration_test.cc"],
     deps = [
         ":http_integration_lib",
-        ":integration_lib",
-        "//include/envoy/upstream:upstream_interface",
-        "//source/common/config:metadata_lib",
         "//source/common/config:resources_lib",
-        "//source/common/json:config_schemas_lib",
-        "//source/common/json:json_loader_lib",
-        "//source/common/network:utility_lib",
-        "//source/common/upstream:health_checker_lib",
-        "//source/common/upstream:health_discovery_service_lib",
-        "//test/common/upstream:utility_lib",
         "//test/config:utility_lib",
         "//test/test_common:network_utility_lib",
+        "//test/test_common:utility_lib",
         "@envoy_api//envoy/api/v2:eds_cc",
         "@envoy_api//envoy/service/discovery/v2:hds_cc",
     ],
@@ -426,7 +410,7 @@ envoy_cc_test(
         "//source/common/buffer:zero_copy_input_stream_lib",
         "//source/common/grpc:codec_lib",
         "//source/common/grpc:common_lib",
-        "//source/common/ratelimit:ratelimit_proto_cc",
+        "//source/common/ratelimit:ratelimit_proto",
         "//source/extensions/filters/http/ratelimit:config",
         "//test/common/grpc:grpc_client_integration_lib",
         "@envoy_api//envoy/service/ratelimit/v2:rls_cc",
@@ -457,35 +441,6 @@ envoy_cc_test(
         "//source/common/ssl:context_lib",
         "//source/extensions/filters/listener/tls_inspector:config",
         "//source/extensions/transport_sockets/ssl:config",
-        "//test/mocks/runtime:runtime_mocks",
-        "//test/mocks/secret:secret_mocks",
-        "//test/test_common:utility_lib",
-        "@envoy_api//envoy/config/transport_socket/capture/v2alpha:capture_cc",
-        "@envoy_api//envoy/data/tap/v2alpha:capture_cc",
-    ],
-)
-
-envoy_cc_test(
-    name = "sds_dynamic_integration_test",
-    srcs = [
-        "sds_dynamic_integration_test.cc",
-    ],
-    data = [
-        "//test/config/integration/certs",
-    ],
-    deps = [
-        ":http_integration_lib",
-        "//source/common/config:protobuf_link_hacks",
-        "//source/common/config:resources_lib",
-        "//source/common/event:dispatcher_includes",
-        "//source/common/event:dispatcher_lib",
-        "//source/common/network:connection_lib",
-        "//source/common/network:utility_lib",
-        "//source/common/ssl:context_config_lib",
-        "//source/common/ssl:context_lib",
-        "//source/extensions/filters/listener/tls_inspector:config",
-        "//source/extensions/transport_sockets/ssl:config",
-        "//test/common/grpc:grpc_client_integration_lib",
         "//test/mocks/runtime:runtime_mocks",
         "//test/mocks/secret:secret_mocks",
         "//test/test_common:utility_lib",
@@ -527,9 +482,6 @@ envoy_cc_test(
         "tcp_proxy_integration_test.cc",
         "tcp_proxy_integration_test.h",
     ],
-    data = [
-        "//test/config/integration/certs",
-    ],
     deps = [
         ":integration_lib",
         "//source/common/event:dispatcher_includes",
@@ -539,7 +491,6 @@ envoy_cc_test(
         "//source/common/ssl:context_lib",
         "//source/extensions/access_loggers/file:config",
         "//source/extensions/filters/network/tcp_proxy:config",
-        "//source/extensions/transport_sockets/ssl:config",
         "//test/mocks/runtime:runtime_mocks",
         "//test/mocks/secret:secret_mocks",
         "//test/test_common:utility_lib",
@@ -603,48 +554,7 @@ envoy_cc_test(
         "//source/common/http:header_map_lib",
         "//source/extensions/filters/listener/tls_inspector:config",
         "//source/extensions/transport_sockets/ssl:config",
-        "//test/mocks/server:server_mocks",
+        "//test/mocks/secret:secret_mocks",
         "//test/test_common:utility_lib",
-    ],
-)
-
-envoy_cc_test_library(
-    name = "h1_fuzz_lib",
-    srcs = [
-        "h1_fuzz.cc",
-    ],
-    hdrs = [
-        "h1_fuzz.h",
-    ],
-    deps = [
-        ":capture_fuzz_proto_cc",
-        ":http_integration_lib",
-        "//source/common/common:assert_lib",
-        "//source/common/common:logger_lib",
-        "//test/fuzz:fuzz_runner_lib",
-        "//test/integration:integration_lib",
-        "//test/test_common:environment_lib",
-    ],
-)
-
-envoy_cc_fuzz_test(
-    name = "h1_capture_fuzz_test",
-    srcs = [
-        "h1_capture_fuzz_test.cc",
-    ],
-    corpus = "h1_corpus",
-    deps = [
-        ":h1_fuzz_lib",
-    ],
-)
-
-envoy_cc_fuzz_test(
-    name = "h1_capture_direct_response_fuzz_test",
-    srcs = [
-        "h1_capture_direct_response_fuzz_test.cc",
-    ],
-    corpus = "h1_corpus",
-    deps = [
-        ":h1_fuzz_lib",
     ],
 )

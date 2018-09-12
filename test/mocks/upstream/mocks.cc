@@ -8,18 +8,17 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::Invoke;
 using testing::Return;
 using testing::ReturnPointee;
 using testing::ReturnRef;
 using testing::SaveArg;
+using testing::_;
 
 namespace Envoy {
 namespace Upstream {
 
-MockHostSet::MockHostSet(uint32_t priority, uint32_t overprovisioning_factor)
-    : priority_(priority), overprovisioning_factor_(overprovisioning_factor) {
+MockHostSet::MockHostSet(uint32_t priority) : priority_(priority) {
   ON_CALL(*this, priority()).WillByDefault(Return(priority_));
   ON_CALL(*this, hosts()).WillByDefault(ReturnRef(hosts_));
   ON_CALL(*this, healthyHosts()).WillByDefault(ReturnRef(healthy_hosts_));

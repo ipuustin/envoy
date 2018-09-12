@@ -6,7 +6,6 @@
 #include "envoy/server/configuration.h"
 #include "envoy/server/guarddog.h"
 #include "envoy/server/watchdog.h"
-#include "envoy/stats/scope.h"
 #include "envoy/stats/stats.h"
 
 #include "common/common/lock_guard.h"
@@ -38,7 +37,7 @@ public:
    * See the configuration documentation for details on the timeout settings.
    */
   GuardDogImpl(Stats::Scope& stats_scope, const Server::Configuration::Main& config,
-               TimeSource& tsource);
+               MonotonicTimeSource& tsource);
   ~GuardDogImpl();
 
   /**
@@ -75,7 +74,7 @@ private:
     bool megamiss_alerted_{};
   };
 
-  TimeSource& time_source_;
+  MonotonicTimeSource& time_source_;
   const std::chrono::milliseconds miss_timeout_;
   const std::chrono::milliseconds megamiss_timeout_;
   const std::chrono::milliseconds kill_timeout_;

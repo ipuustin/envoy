@@ -3,8 +3,6 @@
 #include <cstdint>
 #include <string>
 
-#include "envoy/stats/scope.h"
-
 #include "common/common/assert.h"
 #include "common/common/fmt.h"
 #include "common/config/utility.h"

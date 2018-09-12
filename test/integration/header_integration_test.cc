@@ -120,26 +120,6 @@ route_config:
               - header:
                   key: "x-real-ip"
                   value: "%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%"
-    - name: append-same-headers
-      domains: ["append-same-headers.com"]
-      request_headers_to_add:
-        - header:
-            key: "x-foo"
-            value: "value1"
-        - header:
-            key: "authorization"
-            value: "token1"
-      routes:
-        - match: { prefix: "/test" }
-          route:
-            cluster: cluster_0
-            request_headers_to_add:
-              - header:
-                  key: "x-foo"
-                  value: "value2"
-              - header:
-                  key: "authorization"
-                  value: "token2"
 )EOF";
 
 } // namespace
@@ -162,10 +142,8 @@ public:
     if (eds_connection_ != nullptr) {
       // Don't ASSERT fail if an EDS reconnect ends up unparented.
       fake_upstreams_[1]->set_allow_unexpected_disconnects(true);
-      AssertionResult result = eds_connection_->close();
-      RELEASE_ASSERT(result, result.message());
-      result = eds_connection_->waitForDisconnect();
-      RELEASE_ASSERT(result, result.message());
+      eds_connection_->close();
+      eds_connection_->waitForDisconnect();
       eds_connection_.reset();
     }
     cleanupUpstreamAndDownstream();
@@ -331,16 +309,12 @@ public:
   void initialize() override {
     if (use_eds_) {
       pre_worker_start_test_steps_ = [this]() {
-        AssertionResult result =
-            fake_upstreams_[1]->waitForHttpConnection(*dispatcher_, eds_connection_);
-        RELEASE_ASSERT(result, result.message());
-        result = eds_connection_->waitForNewStream(*dispatcher_, eds_stream_);
-        RELEASE_ASSERT(result, result.message());
+        eds_connection_ = fake_upstreams_[1]->waitForHttpConnection(*dispatcher_);
+        eds_stream_ = eds_connection_->waitForNewStream(*dispatcher_);
         eds_stream_->startGrpcStream();
 
         envoy::api::v2::DiscoveryRequest discovery_request;
-        result = eds_stream_->waitForGrpcMessage(*dispatcher_, discovery_request);
-        RELEASE_ASSERT(result, result.message());
+        eds_stream_->waitForGrpcMessage(*dispatcher_, discovery_request);
 
         envoy::api::v2::DiscoveryResponse discovery_response;
         discovery_response.set_version_info("1");
@@ -369,8 +343,7 @@ public:
         eds_stream_->sendGrpcMessage(discovery_response);
 
         // Wait for the next request to make sure the first response was consumed.
-        result = eds_stream_->waitForGrpcMessage(*dispatcher_, discovery_request);
-        RELEASE_ASSERT(result, result.message());
+        eds_stream_->waitForGrpcMessage(*dispatcher_, discovery_request);
       };
     }
 
@@ -921,41 +894,6 @@ TEST_P(HeaderIntegrationTest, TestXFFParsing) {
           {"x-real-ip", "5.6.7.8"},
           {":path", "/test"},
           {":method", "GET"},
-      },
-      Http::TestHeaderMapImpl{
-          {"server", "envoy"},
-          {"content-length", "0"},
-          {":status", "200"},
-          {"x-unmodified", "response"},
-      },
-      Http::TestHeaderMapImpl{
-          {"server", "envoy"},
-          {"x-unmodified", "response"},
-          {":status", "200"},
-      });
-}
-
-// Validates behavior around same header appending (both predefined headers and
-// other).
-TEST_P(HeaderIntegrationTest, TestAppendSameHeaders) {
-  initializeFilter(HeaderMode::Append, false);
-  performRequest(
-      Http::TestHeaderMapImpl{
-          {":method", "GET"},
-          {":path", "/test"},
-          {":scheme", "http"},
-          {":authority", "append-same-headers.com"},
-          {"authorization", "token3"},
-          {"x-foo", "value3"},
-      },
-      Http::TestHeaderMapImpl{
-          {":authority", "append-same-headers.com"},
-          {":path", "/test"},
-          {":method", "GET"},
-          {"authorization", "token3,token2,token1"},
-          {"x-foo", "value3"},
-          {"x-foo", "value2"},
-          {"x-foo", "value1"},
       },
       Http::TestHeaderMapImpl{
           {"server", "envoy"},

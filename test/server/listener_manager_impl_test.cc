@@ -26,13 +26,13 @@
 #include "absl/strings/match.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::InSequence;
 using testing::Invoke;
 using testing::NiceMock;
 using testing::Return;
 using testing::ReturnRef;
 using testing::Throw;
+using testing::_;
 
 namespace Envoy {
 namespace Server {
@@ -54,7 +54,7 @@ public:
   ListenerManagerImplTest() {
     EXPECT_CALL(worker_factory_, createWorker_()).WillOnce(Return(worker_));
     manager_.reset(
-        new ListenerManagerImpl(server_, listener_factory_, worker_factory_, time_source_));
+        new ListenerManagerImpl(server_, listener_factory_, worker_factory_, system_time_source_));
   }
 
   /**
@@ -115,7 +115,7 @@ public:
   NiceMock<MockWorkerFactory> worker_factory_;
   std::unique_ptr<ListenerManagerImpl> manager_;
   NiceMock<MockGuardDog> guard_dog_;
-  NiceMock<MockTimeSource> time_source_;
+  NiceMock<MockSystemTimeSource> system_time_source_;
 };
 
 class ListenerManagerImplWithRealFiltersTest : public ListenerManagerImplTest {
@@ -406,69 +406,9 @@ TEST_F(ListenerManagerImplTest, AddListenerAddressNotMatching) {
   EXPECT_CALL(*listener_foo, onDestroy());
 }
 
-// Make sure that a listener creation does not fail on IPv4 only setups when FilterChainMatch is not
-// specified and we try to create default CidrRange. See convertDestinationIPsMapToTrie function for
-// more details.
-TEST_F(ListenerManagerImplTest, AddListenerOnIpv4OnlySetups) {
-  InSequence s;
-
-  NiceMock<Api::MockOsSysCalls> os_sys_calls;
-  TestThreadsafeSingletonInjector<Api::OsSysCallsImpl> os_calls(&os_sys_calls);
-
-  const std::string listener_foo_json = R"EOF(
-  {
-    "name": "foo",
-    "address": "tcp://127.0.0.1:1234",
-    "filters": [],
-    "drain_type": "default"
-  }
-  )EOF";
-
-  ListenerHandle* listener_foo = expectListenerCreate(false);
-
-  EXPECT_CALL(os_sys_calls, socket(AF_INET, _, 0)).WillOnce(Return(Api::SysCallIntResult{5, 0}));
-  EXPECT_CALL(os_sys_calls, socket(AF_INET6, _, 0)).WillOnce(Return(Api::SysCallIntResult{-1, 0}));
-
-  EXPECT_CALL(listener_factory_, createListenSocket(_, _, true));
-
-  EXPECT_TRUE(manager_->addOrUpdateListener(parseListenerFromJson(listener_foo_json), "", true));
-  checkStats(1, 0, 0, 0, 1, 0);
-  EXPECT_CALL(*listener_foo, onDestroy());
-}
-
-// Make sure that a listener creation does not fail on IPv6 only setups when FilterChainMatch is not
-// specified and we try to create default CidrRange. See convertDestinationIPsMapToTrie function for
-// more details.
-TEST_F(ListenerManagerImplTest, AddListenerOnIpv6OnlySetups) {
-  InSequence s;
-
-  NiceMock<Api::MockOsSysCalls> os_sys_calls;
-  TestThreadsafeSingletonInjector<Api::OsSysCallsImpl> os_calls(&os_sys_calls);
-
-  const std::string listener_foo_json = R"EOF(
-  {
-    "name": "foo",
-    "address": "tcp://[::0001]:1234",
-    "filters": [],
-    "drain_type": "default"
-  }
-  )EOF";
-
-  ListenerHandle* listener_foo = expectListenerCreate(false);
-
-  EXPECT_CALL(os_sys_calls, socket(AF_INET, _, 0)).WillOnce(Return(Api::SysCallIntResult{-1, 0}));
-  EXPECT_CALL(os_sys_calls, socket(AF_INET6, _, 0)).WillOnce(Return(Api::SysCallIntResult{5, 0}));
-
-  EXPECT_CALL(listener_factory_, createListenSocket(_, _, true));
-
-  EXPECT_TRUE(manager_->addOrUpdateListener(parseListenerFromJson(listener_foo_json), "", true));
-  checkStats(1, 0, 0, 0, 1, 0);
-  EXPECT_CALL(*listener_foo, onDestroy());
-}
-
 // Make sure that a listener that is not modifiable cannot be updated or removed.
 TEST_F(ListenerManagerImplTest, UpdateRemoveNotModifiableListener) {
-  ON_CALL(time_source_, systemTime())
+  ON_CALL(system_time_source_, currentTime())
       .WillByDefault(Return(SystemTime(std::chrono::milliseconds(1001001001001))));
 
   InSequence s;
@@ -526,7 +466,7 @@ dynamic_draining_listeners:
 }
 
 TEST_F(ListenerManagerImplTest, AddOrUpdateListener) {
-  ON_CALL(time_source_, systemTime())
+  ON_CALL(system_time_source_, currentTime())
       .WillByDefault(Return(SystemTime(std::chrono::milliseconds(1001001001001))));
 
   InSequence s;
@@ -594,7 +534,7 @@ filter_chains: {}
 per_connection_buffer_limit_bytes: 10
   )EOF";
 
-  ON_CALL(time_source_, systemTime())
+  ON_CALL(system_time_source_, currentTime())
       .WillByDefault(Return(SystemTime(std::chrono::milliseconds(2002002002002))));
 
   ListenerHandle* listener_foo_update1 = expectListenerCreate(false);
@@ -634,7 +574,7 @@ dynamic_draining_listeners:
       manager_->addOrUpdateListener(parseListenerFromV2Yaml(listener_foo_update1_yaml), "", true));
   checkStats(1, 1, 0, 0, 1, 0);
 
-  ON_CALL(time_source_, systemTime())
+  ON_CALL(system_time_source_, currentTime())
       .WillByDefault(Return(SystemTime(std::chrono::milliseconds(3003003003003))));
 
   // Update foo. Should go into warming, have an immediate warming callback, and start immediate
@@ -686,7 +626,7 @@ dynamic_draining_listeners:
   worker_->callRemovalCompletion();
   checkStats(1, 2, 0, 0, 1, 0);
 
-  ON_CALL(time_source_, systemTime())
+  ON_CALL(system_time_source_, currentTime())
       .WillByDefault(Return(SystemTime(std::chrono::milliseconds(4004004004004))));
 
   // Add bar listener.
@@ -708,7 +648,7 @@ filter_chains: {}
   worker_->callAddCompletion(true);
   checkStats(2, 2, 0, 0, 2, 0);
 
-  ON_CALL(time_source_, systemTime())
+  ON_CALL(system_time_source_, currentTime())
       .WillByDefault(Return(SystemTime(std::chrono::milliseconds(5005005005005))));
 
   // Add baz listener, this time requiring initializing.

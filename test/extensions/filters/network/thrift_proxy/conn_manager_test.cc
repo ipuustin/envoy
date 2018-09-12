@@ -1,6 +1,7 @@
 #include "envoy/config/filter/network/thrift_proxy/v2alpha1/thrift_proxy.pb.h"
 
 #include "common/buffer/buffer_impl.h"
+#include "common/stats/stats_impl.h"
 
 #include "extensions/filters/network/thrift_proxy/buffer_helper.h"
 #include "extensions/filters/network/thrift_proxy/config.h"
@@ -16,11 +17,11 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::Invoke;
 using testing::NiceMock;
 using testing::Return;
 using testing::ReturnRef;
+using testing::_;
 
 namespace Envoy {
 namespace Extensions {
@@ -83,17 +84,11 @@ public:
     filter_->onBelowWriteBufferLowWatermark();
   }
 
-  void writeMessage(Buffer::Instance& buffer, TransportType transport_type,
-                    ProtocolType protocol_type, MessageType msg_type, int32_t seq_id) {
+  void writeFramedBinaryMessage(Buffer::Instance& buffer, MessageType msg_type, int32_t seq_id) {
     Buffer::OwnedImpl msg;
-    ProtocolPtr proto = NamedProtocolConfigFactory::getFactory(protocol_type).createProtocol();
-    MessageMetadata metadata;
-    metadata.setProtocol(protocol_type);
-    metadata.setMethodName("name");
-    metadata.setMessageType(msg_type);
-    metadata.setSequenceId(seq_id);
-
-    proto->writeMessageBegin(msg, metadata);
+    ProtocolPtr proto =
+        NamedProtocolConfigFactory::getFactory(ProtocolType::Binary).createProtocol();
+    proto->writeMessageBegin(msg, "name", msg_type, seq_id);
     proto->writeStructBegin(msg, "response");
     proto->writeFieldBegin(msg, "success", FieldType::String, 0);
     proto->writeString(msg, "field");
@@ -103,12 +98,8 @@ public:
     proto->writeMessageEnd(msg);
 
     TransportPtr transport =
-        NamedTransportConfigFactory::getFactory(transport_type).createTransport();
-    transport->encodeFrame(buffer, metadata, msg);
-  }
-
-  void writeFramedBinaryMessage(Buffer::Instance& buffer, MessageType msg_type, int32_t seq_id) {
-    writeMessage(buffer, TransportType::Framed, ProtocolType::Binary, msg_type, seq_id);
+        NamedTransportConfigFactory::getFactory(TransportType::Framed).createTransport();
+    transport->encodeFrame(buffer, msg);
   }
 
   void writeComplexFramedBinaryMessage(Buffer::Instance& buffer, MessageType msg_type,
@@ -116,12 +107,7 @@ public:
     Buffer::OwnedImpl msg;
     ProtocolPtr proto =
         NamedProtocolConfigFactory::getFactory(ProtocolType::Binary).createProtocol();
-    MessageMetadata metadata;
-    metadata.setMethodName("name");
-    metadata.setMessageType(msg_type);
-    metadata.setSequenceId(seq_id);
-
-    proto->writeMessageBegin(msg, metadata);
+    proto->writeMessageBegin(msg, "name", msg_type, seq_id);
     proto->writeStructBegin(msg, "wrapper"); // call args struct or response struct
     proto->writeFieldBegin(msg, "wrapper_field", FieldType::Struct, 0); // call arg/response success
 
@@ -183,7 +169,7 @@ public:
 
     TransportPtr transport =
         NamedTransportConfigFactory::getFactory(TransportType::Framed).createTransport();
-    transport->encodeFrame(buffer, metadata, msg);
+    transport->encodeFrame(buffer, msg);
   }
 
   void writePartialFramedBinaryMessage(Buffer::Instance& buffer, MessageType msg_type,
@@ -203,12 +189,7 @@ public:
     Buffer::OwnedImpl msg;
     ProtocolPtr proto =
         NamedProtocolConfigFactory::getFactory(ProtocolType::Binary).createProtocol();
-    MessageMetadata metadata;
-    metadata.setMethodName("name");
-    metadata.setMessageType(MessageType::Exception);
-    metadata.setSequenceId(seq_id);
-
-    proto->writeMessageBegin(msg, metadata);
+    proto->writeMessageBegin(msg, "name", MessageType::Exception, seq_id);
     proto->writeStructBegin(msg, "");
     proto->writeFieldBegin(msg, "", FieldType::String, 1);
     proto->writeString(msg, "error");
@@ -222,19 +203,14 @@ public:
 
     TransportPtr transport =
         NamedTransportConfigFactory::getFactory(TransportType::Framed).createTransport();
-    transport->encodeFrame(buffer, metadata, msg);
+    transport->encodeFrame(buffer, msg);
   }
 
   void writeFramedBinaryIDLException(Buffer::Instance& buffer, int32_t seq_id) {
     Buffer::OwnedImpl msg;
     ProtocolPtr proto =
         NamedProtocolConfigFactory::getFactory(ProtocolType::Binary).createProtocol();
-    MessageMetadata metadata;
-    metadata.setMethodName("name");
-    metadata.setMessageType(MessageType::Reply);
-    metadata.setSequenceId(seq_id);
-
-    proto->writeMessageBegin(msg, metadata);
+    proto->writeMessageBegin(msg, "name", MessageType::Reply, seq_id);
     proto->writeStructBegin(msg, "");
     proto->writeFieldBegin(msg, "", FieldType::Struct, 2);
 
@@ -252,7 +228,7 @@ public:
 
     TransportPtr transport =
         NamedTransportConfigFactory::getFactory(TransportType::Framed).createTransport();
-    transport->encodeFrame(buffer, metadata, msg);
+    transport->encodeFrame(buffer, msg);
   }
 
   NiceMock<Server::Configuration::MockFactoryContext> context_;
@@ -309,7 +285,8 @@ TEST_F(ThriftConnectionManagerTest, OnDataHandlesStopIterationAndResume) {
   EXPECT_CALL(*decoder_filter_, setDecoderFilterCallbacks(_))
       .WillOnce(
           Invoke([&](ThriftFilters::DecoderFilterCallbacks& cb) -> void { callbacks = &cb; }));
-  EXPECT_CALL(*decoder_filter_, messageBegin(_)).WillOnce(Return(FilterStatus::StopIteration));
+  EXPECT_CALL(*decoder_filter_, messageBegin(_, _, _))
+      .WillOnce(Return(ThriftFilters::FilterStatus::StopIteration));
 
   EXPECT_EQ(filter_->onData(buffer_, false), Network::FilterStatus::StopIteration);
   EXPECT_EQ(0U, store_.counter("test.request").value());
@@ -425,48 +402,6 @@ TEST_F(ThriftConnectionManagerTest, OnDataHandlesProtocolErrorDuringMessageBegin
   EXPECT_EQ(1U, store_.counter("test.request_decoding_error").value());
 }
 
-TEST_F(ThriftConnectionManagerTest, OnDataHandlesTransportApplicationException) {
-  initializeFilter();
-  addSeq(buffer_, {
-                      0x00, 0x00, 0x00, 0x64, // header: 100 bytes
-                      0x0f, 0xff, 0x00, 0x00, // magic, flags
-                      0x00, 0x00, 0x00, 0x01, // sequence id
-                      0x00, 0x01, 0x00, 0x02, // header size 4, binary proto, 2 transforms
-                      0x01, 0x02, 0x00, 0x00, // transforms: 1, 2; padding
-                  });
-
-  std::string err = "Unknown transform 1";
-  uint8_t len = 41 + err.length();
-  addSeq(write_buffer_, {
-                            0x00, 0x00, 0x00, len,  // header frame size
-                            0x0f, 0xff, 0x00, 0x00, // magic, flags
-                            0x00, 0x00, 0x00, 0x00, // sequence id 0
-                            0x00, 0x01, 0x00, 0x00, // header size 4, binary, 0 transforms
-                            0x00, 0x00,             // header padding
-                            0x80, 0x01, 0x00, 0x03, // binary, exception
-                            0x00, 0x00, 0x00, 0x00, // message name ""
-                            0x00, 0x00, 0x00, 0x00, // sequence id
-                            0x0b, 0x00, 0x01,       // begin string field
-                        });
-  addInt32(write_buffer_, err.length());
-  addString(write_buffer_, err);
-  addSeq(write_buffer_, {
-                            0x08, 0x00, 0x02,       // begin i32 field
-                            0x00, 0x00, 0x00, 0x05, // missing result
-                            0x00,                   // stop field
-                        });
-
-  EXPECT_CALL(filter_callbacks_.connection_, write(_, false))
-      .WillOnce(Invoke([&](Buffer::Instance& buffer, bool) -> void {
-        EXPECT_EQ(bufferToString(write_buffer_), bufferToString(buffer));
-      }));
-  EXPECT_CALL(filter_callbacks_.connection_, close(Network::ConnectionCloseType::FlushWrite));
-
-  EXPECT_EQ(filter_->onData(buffer_, false), Network::FilterStatus::StopIteration);
-  EXPECT_EQ(1U, store_.counter("test.request_decoding_error").value());
-  EXPECT_EQ(0U, store_.gauge("test.request_active").value());
-}
-
 TEST_F(ThriftConnectionManagerTest, OnEvent) {
   // No active calls
   {
@@ -559,7 +494,7 @@ route_config:
   name: "routes"
   routes:
     - match:
-        method_name: name
+        method: name
       route:
         cluster: cluster
 )EOF";
@@ -571,7 +506,8 @@ route_config:
   EXPECT_CALL(*decoder_filter_, setDecoderFilterCallbacks(_))
       .WillOnce(
           Invoke([&](ThriftFilters::DecoderFilterCallbacks& cb) -> void { callbacks = &cb; }));
-  EXPECT_CALL(*decoder_filter_, messageBegin(_)).WillOnce(Return(FilterStatus::StopIteration));
+  EXPECT_CALL(*decoder_filter_, messageBegin(_, _, _))
+      .WillOnce(Return(ThriftFilters::FilterStatus::StopIteration));
 
   EXPECT_EQ(filter_->onData(buffer_, false), Network::FilterStatus::StopIteration);
   EXPECT_EQ(0U, store_.counter("test.request").value());
@@ -744,46 +680,6 @@ TEST_F(ThriftConnectionManagerTest, RequestAndResponseProtocolError) {
   EXPECT_CALL(filter_callbacks_.connection_, write(_, false));
   EXPECT_CALL(filter_callbacks_.connection_.dispatcher_, deferredDelete_(_)).Times(1);
   EXPECT_CALL(*decoder_filter_, resetUpstreamConnection());
-  EXPECT_EQ(true, callbacks->upstreamData(write_buffer_));
-
-  filter_callbacks_.connection_.dispatcher_.clearDeferredDeleteList();
-
-  EXPECT_EQ(1U, store_.counter("test.request").value());
-  EXPECT_EQ(1U, store_.counter("test.request_call").value());
-  EXPECT_EQ(0U, store_.gauge("test.request_active").value());
-  EXPECT_EQ(0U, store_.counter("test.response").value());
-  EXPECT_EQ(0U, store_.counter("test.response_reply").value());
-  EXPECT_EQ(0U, store_.counter("test.response_exception").value());
-  EXPECT_EQ(0U, store_.counter("test.response_invalid_type").value());
-  EXPECT_EQ(0U, store_.counter("test.response_success").value());
-  EXPECT_EQ(0U, store_.counter("test.response_error").value());
-  EXPECT_EQ(1U, store_.counter("test.response_decoding_error").value());
-}
-
-TEST_F(ThriftConnectionManagerTest, RequestAndTransportApplicationException) {
-  initializeFilter();
-  writeMessage(buffer_, TransportType::Header, ProtocolType::Binary, MessageType::Call, 0x0F);
-
-  ThriftFilters::DecoderFilterCallbacks* callbacks{};
-  EXPECT_CALL(*decoder_filter_, setDecoderFilterCallbacks(_))
-      .WillOnce(
-          Invoke([&](ThriftFilters::DecoderFilterCallbacks& cb) -> void { callbacks = &cb; }));
-
-  EXPECT_EQ(filter_->onData(buffer_, false), Network::FilterStatus::StopIteration);
-  EXPECT_EQ(1U, store_.counter("test.request_call").value());
-
-  // Response with unknown transform
-  addSeq(write_buffer_, {
-                            0x00, 0x00, 0x00, 0x64, // header: 100 bytes
-                            0x0f, 0xff, 0x00, 0x00, // magic, flags
-                            0x00, 0x00, 0x00, 0x01, // sequence id
-                            0x00, 0x01, 0x00, 0x02, // header size 4, binary proto, 2 transforms
-                            0x01, 0x02, 0x00, 0x00, // transforms: 1, 2; padding
-                        });
-
-  callbacks->startUpstreamResponse(TransportType::Header, ProtocolType::Binary);
-
-  EXPECT_CALL(filter_callbacks_.connection_.dispatcher_, deferredDelete_(_)).Times(1);
   EXPECT_EQ(true, callbacks->upstreamData(write_buffer_));
 
   filter_callbacks_.connection_.dispatcher_.clearDeferredDeleteList();

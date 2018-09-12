@@ -44,4 +44,4 @@ namespace Envoy {
 #define FALLTHRU
 #endif
 
-} // namespace Envoy
+} // Envoy

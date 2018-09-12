@@ -1,7 +1,5 @@
 #include "common/grpc/google_async_client_impl.h"
 
-#include "envoy/stats/scope.h"
-
 #include "common/common/empty_string.h"
 #include "common/common/lock_guard.h"
 #include "common/config/datasource.h"
@@ -387,7 +385,7 @@ GoogleAsyncRequestImpl::GoogleAsyncRequestImpl(
       callbacks_(callbacks) {
   current_span_ = parent_span.spawnChild(Tracing::EgressConfig::get(),
                                          "async " + parent.stat_prefix_ + " egress",
-                                         parent.timeSource().systemTime());
+                                         ProdSystemTimeSource::instance_.currentTime());
   current_span_->setTag(Tracing::Tags::get().UPSTREAM_CLUSTER, parent.stat_prefix_);
   current_span_->setTag(Tracing::Tags::get().COMPONENT, Tracing::Tags::get().PROXY);
 }

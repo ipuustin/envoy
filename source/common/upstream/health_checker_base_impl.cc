@@ -1,7 +1,6 @@
 #include "common/upstream/health_checker_base_impl.h"
 
 #include "envoy/data/core/v2alpha/health_check_event.pb.h"
-#include "envoy/stats/scope.h"
 
 #include "common/router/router.h"
 
@@ -107,7 +106,6 @@ std::chrono::milliseconds HealthCheckerImplBase::interval(HealthState state,
 void HealthCheckerImplBase::addHosts(const HostVector& hosts) {
   for (const HostSharedPtr& host : hosts) {
     active_sessions_[host] = makeSession(host);
-    host->setActiveHealthFailureType(Host::ActiveHealthFailureType::UNKNOWN);
     host->setHealthChecker(
         HealthCheckHostMonitorPtr{new HealthCheckHostMonitorImpl(shared_from_this(), host)});
     active_sessions_[host]->start();
@@ -287,7 +285,6 @@ void HealthCheckEventLoggerImpl::logEjectUnhealthy(
   *event.mutable_host() = std::move(address);
   event.set_cluster_name(host->cluster().name());
   event.mutable_eject_unhealthy_event()->set_failure_type(failure_type);
-  TimestampUtil::systemClockToTimestamp(time_source_.systemTime(), *event.mutable_timestamp());
   // Make sure the type enums make it into the JSON
   const auto json = MessageUtil::getJsonStringFromMessage(event, /* pretty_print */ false,
                                                           /* always_print_primitive_fields */ true);
@@ -304,7 +301,6 @@ void HealthCheckEventLoggerImpl::logAddHealthy(
   *event.mutable_host() = std::move(address);
   event.set_cluster_name(host->cluster().name());
   event.mutable_add_healthy_event()->set_first_check(first_check);
-  TimestampUtil::systemClockToTimestamp(time_source_.systemTime(), *event.mutable_timestamp());
   // Make sure the type enums make it into the JSON
   const auto json = MessageUtil::getJsonStringFromMessage(event, /* pretty_print */ false,
                                                           /* always_print_primitive_fields */ true);

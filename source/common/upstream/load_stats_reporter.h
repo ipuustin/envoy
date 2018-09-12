@@ -2,7 +2,6 @@
 
 #include "envoy/event/dispatcher.h"
 #include "envoy/service/load_stats/v2/lrs.pb.h"
-#include "envoy/stats/scope.h"
 #include "envoy/stats/stats_macros.h"
 #include "envoy/upstream/cluster_manager.h"
 
@@ -33,9 +32,9 @@ class LoadStatsReporter
     : Grpc::TypedAsyncStreamCallbacks<envoy::service::load_stats::v2::LoadStatsResponse>,
       Logger::Loggable<Logger::Id::upstream> {
 public:
-  LoadStatsReporter(const LocalInfo::LocalInfo& local_info, ClusterManager& cluster_manager,
+  LoadStatsReporter(const envoy::api::v2::core::Node& node, ClusterManager& cluster_manager,
                     Stats::Scope& scope, Grpc::AsyncClientPtr async_client,
-                    Event::Dispatcher& dispatcher);
+                    Event::Dispatcher& dispatcher, MonotonicTimeSource& time_source);
 
   // Grpc::TypedAsyncStreamCallbacks
   void onCreateInitialMetadata(Http::HeaderMap& metadata) override;
@@ -66,7 +65,7 @@ private:
   std::unique_ptr<envoy::service::load_stats::v2::LoadStatsResponse> message_;
   // Map from cluster name to start of measurement interval.
   std::unordered_map<std::string, std::chrono::steady_clock::duration> clusters_;
-  TimeSource& time_source_;
+  MonotonicTimeSource& time_source_;
 };
 
 typedef std::unique_ptr<LoadStatsReporter> LoadStatsReporterPtr;

@@ -3,13 +3,13 @@
 
 #include "envoy/json/json_object.h"
 #include "envoy/runtime/runtime.h"
-#include "envoy/stats/stats.h"
 
 #include "common/http/message_impl.h"
 #include "common/json/json_loader.h"
 #include "common/profiler/profiler.h"
 #include "common/protobuf/protobuf.h"
 #include "common/protobuf/utility.h"
+#include "common/stats/stats_impl.h"
 #include "common/stats/thread_local_store.h"
 
 #include "server/http/admin.h"
@@ -26,7 +26,6 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::HasSubstr;
 using testing::InSequence;
 using testing::Invoke;
@@ -35,14 +34,26 @@ using testing::Ref;
 using testing::Return;
 using testing::ReturnPointee;
 using testing::ReturnRef;
+using testing::_;
 
 namespace Envoy {
 namespace Server {
 
-class AdminStatsTest : public testing::TestWithParam<Network::Address::IpVersion> {
+class AdminStatsTest : public testing::TestWithParam<Network::Address::IpVersion>,
+                       public Stats::RawStatDataAllocator {
 public:
-  AdminStatsTest() : alloc_(options_) {
-    store_ = std::make_unique<Stats::ThreadLocalStoreImpl>(options_, alloc_);
+public:
+  AdminStatsTest() {
+    ON_CALL(*this, alloc(_))
+        .WillByDefault(Invoke(
+            [this](const std::string& name) -> Stats::RawStatData* { return alloc_.alloc(name); }));
+
+    ON_CALL(*this, free(_)).WillByDefault(Invoke([this](Stats::RawStatData& data) -> void {
+      return alloc_.free(data);
+    }));
+
+    EXPECT_CALL(*this, alloc("stats.overflow"));
+    store_ = std::make_unique<Stats::ThreadLocalStoreImpl>(options_, *this);
     store_->addSink(sink_);
   }
 
@@ -53,11 +64,14 @@ public:
     return AdminImpl::statsAsJson(all_stats, all_histograms, used_only, true);
   }
 
+  MOCK_METHOD1(alloc, Stats::RawStatData*(const std::string& name));
+  MOCK_METHOD1(free, void(Stats::RawStatData& data));
+
   NiceMock<Event::MockDispatcher> main_thread_dispatcher_;
   NiceMock<ThreadLocal::MockInstance> tls_;
-  Stats::StatsOptionsImpl options_;
-  Stats::MockedTestAllocator alloc_;
+  Stats::TestAllocator alloc_;
   Stats::MockSink sink_;
+  Stats::StatsOptionsImpl options_;
   std::unique_ptr<Stats::ThreadLocalStoreImpl> store_;
 };
 
@@ -107,7 +121,7 @@ TEST_P(AdminStatsTest, StatsAsJson) {
 
   store_->mergeHistograms([]() -> void {});
 
-  EXPECT_CALL(alloc_, free(_));
+  EXPECT_CALL(*this, free(_));
 
   std::map<std::string, uint64_t> all_stats;
 
@@ -125,7 +139,6 @@ TEST_P(AdminStatsTest, StatsAsJson) {
                     90.0,
                     95.0,
                     99.0,
-                    99.5,
                     99.9,
                     100.0
                 ],
@@ -160,10 +173,6 @@ TEST_P(AdminStatsTest, StatsAsJson) {
                             {
                                 "interval": null,
                                 "cumulative": 109.9
-                            },
-                            {
-                                "interval": null,
-                                "cumulative": 109.95
                             },
                             {
                                 "interval": null,
@@ -207,10 +216,6 @@ TEST_P(AdminStatsTest, StatsAsJson) {
                                 "cumulative": 209.8
                             },
                             {
-                                "interval": 109.95,
-                                "cumulative": 209.9
-                            },
-                            {
                                 "interval": 109.99,
                                 "cumulative": 209.98
                             },
@@ -252,7 +257,7 @@ TEST_P(AdminStatsTest, UsedOnlyStatsAsJson) {
 
   store_->mergeHistograms([]() -> void {});
 
-  EXPECT_CALL(alloc_, free(_));
+  EXPECT_CALL(*this, free(_));
 
   std::map<std::string, uint64_t> all_stats;
 
@@ -271,7 +276,6 @@ TEST_P(AdminStatsTest, UsedOnlyStatsAsJson) {
                     90.0,
                     95.0,
                     99.0,
-                    99.5,
                     99.9,
                     100.0
                 ],
@@ -306,10 +310,6 @@ TEST_P(AdminStatsTest, UsedOnlyStatsAsJson) {
                             {
                                 "interval": 109.9,
                                 "cumulative": 209.8
-                            },
-                            {
-                                "interval": 109.95,
-                                "cumulative": 209.9
                             },
                             {
                                 "interval": 109.99,
@@ -417,15 +417,15 @@ TEST_P(AdminInstanceTest, AdminProfiler) {
 
 #endif
 
-TEST_P(AdminInstanceTest, MutatesErrorWithGet) {
+TEST_P(AdminInstanceTest, MutatesWarnWithGet) {
   Buffer::OwnedImpl data;
   Http::HeaderMapImpl header_map;
   const std::string path("/healthcheck/fail");
   // TODO(jmarantz): the call to getCallback should be made to fail, but as an interim we will
   // just issue a warning, so that scripts using curl GET comamnds to mutate state can be fixed.
-  EXPECT_LOG_CONTAINS("error",
+  EXPECT_LOG_CONTAINS("warning",
                       "admin path \"" + path + "\" mutates state, method=GET rather than POST",
-                      EXPECT_EQ(Http::Code::BadRequest, getCallback(path, header_map, data)));
+                      EXPECT_EQ(Http::Code::OK, getCallback(path, header_map, data)));
 }
 
 TEST_P(AdminInstanceTest, AdminBadProfiler) {
@@ -531,8 +531,8 @@ TEST_P(AdminInstanceTest, HelpUsesFormForMutations) {
   Http::HeaderMapImpl header_map;
   Buffer::OwnedImpl response;
   EXPECT_EQ(Http::Code::OK, getCallback("/", header_map, response));
-  const std::string logging_action = "<form action='logging' method='post'";
-  const std::string stats_href = "<a href='stats'";
+  const std::string logging_action = "<form action='/logging' method='post'";
+  const std::string stats_href = "<a href='/stats'";
   EXPECT_NE(-1, response.search(logging_action.data(), logging_action.size(), 0));
   EXPECT_NE(-1, response.search(stats_href.data(), stats_href.size(), 0));
 }
@@ -546,70 +546,17 @@ TEST_P(AdminInstanceTest, ConfigDump) {
     return msg;
   });
   const std::string expected_json = R"EOF({
- "configs": [
-  {
+ "configs": {
+  "foo": {
    "@type": "type.googleapis.com/google.protobuf.StringValue",
    "value": "bar"
   }
- ]
+ }
 }
 )EOF";
   EXPECT_EQ(Http::Code::OK, getCallback("/config_dump", header_map, response));
   std::string output = response.toString();
   EXPECT_EQ(expected_json, output);
-}
-
-TEST_P(AdminInstanceTest, ConfigDumpMaintainsOrder) {
-  // Add configs in random order and validate config_dump dumps in the order.
-  auto bootstrap_entry = admin_.getConfigTracker().add("bootstrap", [] {
-    auto msg = std::make_unique<ProtobufWkt::StringValue>();
-    msg->set_value("bootstrap_config");
-    return msg;
-  });
-  auto route_entry = admin_.getConfigTracker().add("routes", [] {
-    auto msg = std::make_unique<ProtobufWkt::StringValue>();
-    msg->set_value("routes_config");
-    return msg;
-  });
-  auto listener_entry = admin_.getConfigTracker().add("listeners", [] {
-    auto msg = std::make_unique<ProtobufWkt::StringValue>();
-    msg->set_value("listeners_config");
-    return msg;
-  });
-  auto cluster_entry = admin_.getConfigTracker().add("clusters", [] {
-    auto msg = std::make_unique<ProtobufWkt::StringValue>();
-    msg->set_value("clusters_config");
-    return msg;
-  });
-  const std::string expected_json = R"EOF({
- "configs": [
-  {
-   "@type": "type.googleapis.com/google.protobuf.StringValue",
-   "value": "bootstrap_config"
-  },
-  {
-   "@type": "type.googleapis.com/google.protobuf.StringValue",
-   "value": "clusters_config"
-  },
-  {
-   "@type": "type.googleapis.com/google.protobuf.StringValue",
-   "value": "listeners_config"
-  },
-  {
-   "@type": "type.googleapis.com/google.protobuf.StringValue",
-   "value": "routes_config"
-  }
- ]
-}
-)EOF";
-  // Run it multiple times and validate that order is preserved.
-  for (size_t i = 0; i < 5; i++) {
-    Buffer::OwnedImpl response;
-    Http::HeaderMapImpl header_map;
-    EXPECT_EQ(Http::Code::OK, getCallback("/config_dump", header_map, response));
-    const std::string output = response.toString();
-    EXPECT_EQ(expected_json, output);
-  }
 }
 
 TEST_P(AdminInstanceTest, Runtime) {
@@ -691,7 +638,7 @@ TEST_P(AdminInstanceTest, RuntimeModify) {
   overrides["nothing"] = "";
   EXPECT_CALL(loader, mergeValues(overrides)).Times(1);
   EXPECT_EQ(Http::Code::OK,
-            postCallback("/runtime_modify?foo=bar&x=42&nothing=", header_map, response));
+            getCallback("/runtime_modify?foo=bar&x=42&nothing=", header_map, response));
   EXPECT_EQ("OK\n", response.toString());
 }
 
@@ -699,7 +646,7 @@ TEST_P(AdminInstanceTest, RuntimeModifyNoArguments) {
   Http::HeaderMapImpl header_map;
   Buffer::OwnedImpl response;
 
-  EXPECT_EQ(Http::Code::BadRequest, postCallback("/runtime_modify", header_map, response));
+  EXPECT_EQ(Http::Code::BadRequest, getCallback("/runtime_modify", header_map, response));
   EXPECT_TRUE(absl::StartsWith(response.toString(), "usage:"));
 }
 
@@ -737,13 +684,9 @@ TEST_P(AdminInstanceTest, ClustersJson) {
       Network::Utility::resolveUrl("tcp://1.2.3.4:80");
   ON_CALL(*host, address()).WillByDefault(Return(address));
 
-  // Add stats in random order and validate that they come in order.
   Stats::IsolatedStoreImpl store;
   store.counter("test_counter").add(10);
-  store.counter("rest_counter").add(10);
-  store.counter("arest_counter").add(5);
   store.gauge("test_gauge").set(11);
-  store.gauge("atest_gauge").set(10);
   ON_CALL(*host, gauges()).WillByDefault(Invoke([&store]() { return store.gauges(); }));
   ON_CALL(*host, counters()).WillByDefault(Invoke([&store]() { return store.counters(); }));
 
@@ -780,33 +723,16 @@ TEST_P(AdminInstanceTest, ClustersJson) {
        "port_value": 80
       }
      },
-     "stats": [
-       {
-       "name": "arest_counter",
-       "value": "5",
-       "type": "COUNTER"
-       },
-       {
-       "name": "rest_counter",
+     "stats": {
+      "test_counter": {
        "value": "10",
        "type": "COUNTER"
       },
-      {
-       "name": "test_counter",
-       "value": "10",
-       "type": "COUNTER"
-      },
-      {
-       "name": "atest_gauge",
-       "value": "10",
-       "type": "GAUGE"
-      },
-      {
-       "name": "test_gauge",
+      "test_gauge": {
        "value": "11",
        "type": "GAUGE"
       },
-     ],
+     },
      "health_status": {
       "eds_health_status": "HEALTHY",
       "failed_active_health_check": true,
@@ -838,7 +764,8 @@ TEST_P(AdminInstanceTest, ClustersJson) {
 TEST_P(AdminInstanceTest, GetRequest) {
   Http::HeaderMapImpl response_headers;
   std::string body;
-  EXPECT_EQ(Http::Code::OK, admin_.request("/server_info", "GET", response_headers, body));
+  EXPECT_EQ(Http::Code::OK, admin_.request("/server_info", Http::Utility::QueryParams(), "GET",
+                                           response_headers, body));
   EXPECT_TRUE(absl::StartsWith(body, "envoy ")) << body;
   EXPECT_THAT(std::string(response_headers.ContentType()->value().getStringView()),
               HasSubstr("text/plain"));
@@ -847,7 +774,9 @@ TEST_P(AdminInstanceTest, GetRequest) {
 TEST_P(AdminInstanceTest, GetRequestJson) {
   Http::HeaderMapImpl response_headers;
   std::string body;
-  EXPECT_EQ(Http::Code::OK, admin_.request("/stats?format=json", "GET", response_headers, body));
+  EXPECT_EQ(Http::Code::OK,
+            admin_.request("/stats", Http::Utility::QueryParams({{"format", "json"}}), "GET",
+                           response_headers, body));
   EXPECT_THAT(body, HasSubstr("{\"stats\":["));
   EXPECT_THAT(std::string(response_headers.ContentType()->value().getStringView()),
               HasSubstr("application/json"));
@@ -856,8 +785,9 @@ TEST_P(AdminInstanceTest, GetRequestJson) {
 TEST_P(AdminInstanceTest, PostRequest) {
   Http::HeaderMapImpl response_headers;
   std::string body;
-  EXPECT_NO_LOGS(EXPECT_EQ(Http::Code::OK,
-                           admin_.request("/healthcheck/fail", "POST", response_headers, body)));
+  EXPECT_NO_LOGS(
+      EXPECT_EQ(Http::Code::OK, admin_.request("/healthcheck/fail", Http::Utility::QueryParams(),
+                                               "POST", response_headers, body)));
   EXPECT_EQ(body, "OK\n");
   EXPECT_THAT(std::string(response_headers.ContentType()->value().getStringView()),
               HasSubstr("text/plain"));
@@ -865,7 +795,6 @@ TEST_P(AdminInstanceTest, PostRequest) {
 
 class PrometheusStatsFormatterTest : public testing::Test {
 protected:
-  PrometheusStatsFormatterTest() /*: alloc_(stats_options_)*/ {}
   void addCounter(const std::string& name, std::vector<Stats::Tag> cluster_tags) {
     std::string tname = std::string(name);
     counters_.push_back(alloc_.makeCounter(name, std::move(tname), std::move(cluster_tags)));
@@ -876,8 +805,7 @@ protected:
     gauges_.push_back(alloc_.makeGauge(name, std::move(tname), std::move(cluster_tags)));
   }
 
-  Stats::StatsOptionsImpl stats_options_;
-  Stats::HeapStatDataAllocator alloc_;
+  Stats::HeapRawStatDataAllocator alloc_;
   std::vector<Stats::CounterSharedPtr> counters_;
   std::vector<Stats::GaugeSharedPtr> gauges_;
 };

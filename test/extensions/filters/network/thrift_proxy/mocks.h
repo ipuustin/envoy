@@ -2,7 +2,6 @@
 
 #include "extensions/filters/network/thrift_proxy/conn_manager.h"
 #include "extensions/filters/network/thrift_proxy/filters/filter.h"
-#include "extensions/filters/network/thrift_proxy/metadata.h"
 #include "extensions/filters/network/thrift_proxy/protocol.h"
 #include "extensions/filters/network/thrift_proxy/router/router.h"
 #include "extensions/filters/network/thrift_proxy/transport.h"
@@ -39,9 +38,9 @@ public:
   // ThriftProxy::Transport
   MOCK_CONST_METHOD0(name, const std::string&());
   MOCK_CONST_METHOD0(type, TransportType());
-  MOCK_METHOD2(decodeFrameStart, bool(Buffer::Instance&, MessageMetadata&));
+  MOCK_METHOD2(decodeFrameStart, bool(Buffer::Instance&, absl::optional<uint32_t>&));
   MOCK_METHOD1(decodeFrameEnd, bool(Buffer::Instance&));
-  MOCK_METHOD3(encodeFrame, void(Buffer::Instance&, const MessageMetadata&, Buffer::Instance&));
+  MOCK_METHOD2(encodeFrame, void(Buffer::Instance&, Buffer::Instance&));
 
   std::string name_{"mock"};
   TransportType type_{TransportType::Auto};
@@ -55,8 +54,8 @@ public:
   // ThriftProxy::Protocol
   MOCK_CONST_METHOD0(name, const std::string&());
   MOCK_CONST_METHOD0(type, ProtocolType());
-  MOCK_METHOD1(setType, void(ProtocolType));
-  MOCK_METHOD2(readMessageBegin, bool(Buffer::Instance& buffer, MessageMetadata& metadata));
+  MOCK_METHOD4(readMessageBegin, bool(Buffer::Instance& buffer, std::string& name,
+                                      MessageType& msg_type, int32_t& seq_id));
   MOCK_METHOD1(readMessageEnd, bool(Buffer::Instance& buffer));
   MOCK_METHOD2(readStructBegin, bool(Buffer::Instance& buffer, std::string& name));
   MOCK_METHOD1(readStructEnd, bool(Buffer::Instance& buffer));
@@ -79,7 +78,8 @@ public:
   MOCK_METHOD2(readString, bool(Buffer::Instance& buffer, std::string& value));
   MOCK_METHOD2(readBinary, bool(Buffer::Instance& buffer, std::string& value));
 
-  MOCK_METHOD2(writeMessageBegin, void(Buffer::Instance& buffer, const MessageMetadata& metadata));
+  MOCK_METHOD4(writeMessageBegin, void(Buffer::Instance& buffer, const std::string& name,
+                                       MessageType msg_type, int32_t seq_id));
   MOCK_METHOD1(writeMessageEnd, void(Buffer::Instance& buffer));
   MOCK_METHOD2(writeStructBegin, void(Buffer::Instance& buffer, const std::string& name));
   MOCK_METHOD1(writeStructEnd, void(Buffer::Instance& buffer));
@@ -112,46 +112,7 @@ public:
   ~MockDecoderCallbacks();
 
   // ThriftProxy::DecoderCallbacks
-  MOCK_METHOD0(newDecoderEventHandler, DecoderEventHandler&());
-};
-
-class MockDecoderEventHandler : public DecoderEventHandler {
-public:
-  MockDecoderEventHandler();
-  ~MockDecoderEventHandler();
-
-  // ThriftProxy::DecoderEventHandler
-  MOCK_METHOD1(transportBegin, FilterStatus(MessageMetadataSharedPtr metadata));
-  MOCK_METHOD0(transportEnd, FilterStatus());
-  MOCK_METHOD1(messageBegin, FilterStatus(MessageMetadataSharedPtr metadata));
-  MOCK_METHOD0(messageEnd, FilterStatus());
-  MOCK_METHOD1(structBegin, FilterStatus(const absl::string_view name));
-  MOCK_METHOD0(structEnd, FilterStatus());
-  MOCK_METHOD3(fieldBegin,
-               FilterStatus(const absl::string_view name, FieldType msg_type, int16_t field_id));
-  MOCK_METHOD0(fieldEnd, FilterStatus());
-  MOCK_METHOD1(boolValue, FilterStatus(bool value));
-  MOCK_METHOD1(byteValue, FilterStatus(uint8_t value));
-  MOCK_METHOD1(int16Value, FilterStatus(int16_t value));
-  MOCK_METHOD1(int32Value, FilterStatus(int32_t value));
-  MOCK_METHOD1(int64Value, FilterStatus(int64_t value));
-  MOCK_METHOD1(doubleValue, FilterStatus(double value));
-  MOCK_METHOD1(stringValue, FilterStatus(absl::string_view value));
-  MOCK_METHOD3(mapBegin, FilterStatus(FieldType key_type, FieldType value_type, uint32_t size));
-  MOCK_METHOD0(mapEnd, FilterStatus());
-  MOCK_METHOD2(listBegin, FilterStatus(FieldType elem_type, uint32_t size));
-  MOCK_METHOD0(listEnd, FilterStatus());
-  MOCK_METHOD2(setBegin, FilterStatus(FieldType elem_type, uint32_t size));
-  MOCK_METHOD0(setEnd, FilterStatus());
-};
-
-class MockDirectResponse : public DirectResponse {
-public:
-  MockDirectResponse();
-  ~MockDirectResponse();
-
-  // ThriftProxy::DirectResponse
-  MOCK_CONST_METHOD3(encode, void(MessageMetadata&, Protocol&, Buffer::Instance&));
+  MOCK_METHOD0(newDecoderFilter, ThriftFilters::DecoderFilter&());
 };
 
 namespace ThriftFilters {
@@ -165,11 +126,10 @@ public:
   MOCK_METHOD0(onDestroy, void());
   MOCK_METHOD1(setDecoderFilterCallbacks, void(DecoderFilterCallbacks& callbacks));
   MOCK_METHOD0(resetUpstreamConnection, void());
-
-  // ThriftProxy::DecoderEventHandler
-  MOCK_METHOD1(transportBegin, FilterStatus(MessageMetadataSharedPtr metadata));
+  MOCK_METHOD1(transportBegin, FilterStatus(absl::optional<uint32_t> size));
   MOCK_METHOD0(transportEnd, FilterStatus());
-  MOCK_METHOD1(messageBegin, FilterStatus(MessageMetadataSharedPtr metadata));
+  MOCK_METHOD3(messageBegin,
+               FilterStatus(const absl::string_view name, MessageType msg_type, int32_t seq_id));
   MOCK_METHOD0(messageEnd, FilterStatus());
   MOCK_METHOD1(structBegin, FilterStatus(const absl::string_view name));
   MOCK_METHOD0(structEnd, FilterStatus());
@@ -203,10 +163,12 @@ public:
   MOCK_METHOD0(route, Router::RouteConstSharedPtr());
   MOCK_CONST_METHOD0(downstreamTransportType, TransportType());
   MOCK_CONST_METHOD0(downstreamProtocolType, ProtocolType());
-  MOCK_METHOD1(sendLocalReply, void(const DirectResponse&));
+  void sendLocalReply(DirectResponsePtr&& response) override { sendLocalReply_(response); }
   MOCK_METHOD2(startUpstreamResponse, void(TransportType, ProtocolType));
   MOCK_METHOD1(upstreamData, bool(Buffer::Instance&));
   MOCK_METHOD0(resetDownstreamConnection, void());
+
+  MOCK_METHOD1(sendLocalReply_, void(DirectResponsePtr&));
 
   uint64_t stream_id_{1};
   NiceMock<Network::MockConnection> connection_;

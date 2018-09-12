@@ -3,15 +3,15 @@
 #include "envoy/common/exception.h"
 
 #include "extensions/filters/network/thrift_proxy/buffer_helper.h"
+#include "extensions/filters/network/thrift_proxy/transport_impl.h"
 
 namespace Envoy {
 namespace Extensions {
 namespace NetworkFilters {
 namespace ThriftProxy {
 
-bool FramedTransportImpl::decodeFrameStart(Buffer::Instance& buffer, MessageMetadata& metadata) {
-  UNREFERENCED_PARAMETER(metadata);
-
+bool FramedTransportImpl::decodeFrameStart(Buffer::Instance& buffer,
+                                           absl::optional<uint32_t>& size) {
   if (buffer.length() < 4) {
     return false;
   }
@@ -24,16 +24,13 @@ bool FramedTransportImpl::decodeFrameStart(Buffer::Instance& buffer, MessageMeta
 
   buffer.drain(4);
 
-  metadata.setFrameSize(static_cast<uint32_t>(thrift_size));
+  size = static_cast<uint32_t>(thrift_size);
   return true;
 }
 
 bool FramedTransportImpl::decodeFrameEnd(Buffer::Instance&) { return true; }
 
-void FramedTransportImpl::encodeFrame(Buffer::Instance& buffer, const MessageMetadata& metadata,
-                                      Buffer::Instance& message) {
-  UNREFERENCED_PARAMETER(metadata);
-
+void FramedTransportImpl::encodeFrame(Buffer::Instance& buffer, Buffer::Instance& message) {
   uint64_t size = message.length();
   if (size == 0 || size > MaxFrameSize) {
     throw EnvoyException(fmt::format("invalid thrift framed transport frame size {}", size));

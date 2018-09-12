@@ -2,8 +2,6 @@
 #include <cstdint>
 #include <string>
 
-#include "envoy/stats/scope.h"
-
 #include "common/http/header_map_impl.h"
 #include "common/http/headers.h"
 #include "common/ratelimit/ratelimit_impl.h"
@@ -17,23 +15,19 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::AtLeast;
 using testing::Invoke;
 using testing::Ref;
 using testing::Return;
 using testing::WithArg;
+using testing::_;
 
 namespace Envoy {
 namespace RateLimit {
 
 class MockRequestCallbacks : public RequestCallbacks {
 public:
-  void complete(LimitStatus status, Http::HeaderMapPtr&& headers) {
-    complete_(status, headers.get());
-  }
-
-  MOCK_METHOD2(complete_, void(LimitStatus status, const Http::HeaderMap* headers));
+  MOCK_METHOD1(complete, void(LimitStatus status));
 };
 
 // TODO(junr03): legacy rate limit is deprecated. Remove the boolean parameter after 1.8.0.
@@ -47,8 +41,6 @@ public:
           Grpc::AsyncClientPtr{async_client_}, absl::optional<std::chrono::milliseconds>(),
           "envoy.service.ratelimit.v2.RateLimitService.ShouldRateLimit"));
     } else {
-      // Force link time dependency on deprecated message type.
-      pb::lyft::ratelimit::RateLimit _ignore;
       client_.reset(new GrpcClientImpl(Grpc::AsyncClientPtr{async_client_},
                                        absl::optional<std::chrono::milliseconds>(),
                                        "pb.lyft.ratelimit.RateLimitService.ShouldRateLimit"));
@@ -97,7 +89,7 @@ TEST_P(RateLimitGrpcClientTest, Basic) {
     response.reset(new envoy::service::ratelimit::v2::RateLimitResponse());
     response->set_overall_code(envoy::service::ratelimit::v2::RateLimitResponse_Code_OVER_LIMIT);
     EXPECT_CALL(span_, setTag("ratelimit_status", "over_limit"));
-    EXPECT_CALL(request_callbacks_, complete_(LimitStatus::OverLimit, _));
+    EXPECT_CALL(request_callbacks_, complete(LimitStatus::OverLimit));
     client_->onSuccess(std::move(response), span_);
   }
 
@@ -116,7 +108,7 @@ TEST_P(RateLimitGrpcClientTest, Basic) {
     response.reset(new envoy::service::ratelimit::v2::RateLimitResponse());
     response->set_overall_code(envoy::service::ratelimit::v2::RateLimitResponse_Code_OK);
     EXPECT_CALL(span_, setTag("ratelimit_status", "ok"));
-    EXPECT_CALL(request_callbacks_, complete_(LimitStatus::OK, _));
+    EXPECT_CALL(request_callbacks_, complete(LimitStatus::OK));
     client_->onSuccess(std::move(response), span_);
   }
 
@@ -133,7 +125,7 @@ TEST_P(RateLimitGrpcClientTest, Basic) {
                    Tracing::NullSpan::instance());
 
     response.reset(new envoy::service::ratelimit::v2::RateLimitResponse());
-    EXPECT_CALL(request_callbacks_, complete_(LimitStatus::Error, _));
+    EXPECT_CALL(request_callbacks_, complete(LimitStatus::Error));
     client_->onFailure(Grpc::Status::Unknown, "", span_);
   }
 }
@@ -185,7 +177,7 @@ TEST(RateLimitNullFactoryTest, Basic) {
   NullFactoryImpl factory;
   ClientPtr client = factory.create(absl::optional<std::chrono::milliseconds>());
   MockRequestCallbacks request_callbacks;
-  EXPECT_CALL(request_callbacks, complete_(LimitStatus::OK, _));
+  EXPECT_CALL(request_callbacks, complete(LimitStatus::OK));
   client->limit(request_callbacks, "foo", {{{{"foo", "bar"}}}}, Tracing::NullSpan::instance());
   client->cancel();
 }

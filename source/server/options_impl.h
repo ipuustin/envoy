@@ -6,9 +6,8 @@
 
 #include "envoy/common/exception.h"
 #include "envoy/server/options.h"
-#include "envoy/stats/stats_options.h"
 
-#include "common/stats/stats_options_impl.h"
+#include "common/stats/stats_impl.h"
 
 #include "spdlog/spdlog.h"
 

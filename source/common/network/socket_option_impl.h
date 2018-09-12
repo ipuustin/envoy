@@ -5,7 +5,6 @@
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 
-#include "envoy/api/os_sys_calls.h"
 #include "envoy/network/listen_socket.h"
 
 #include "common/common/logger.h"
@@ -103,16 +102,8 @@ public:
 
   bool isSupported() const;
 
-  /**
-   * Set the option on the given socket.
-   * @param socket the socket on which to apply the option.
-   * @param optname the option name.
-   * @param value the option value.
-   * @return a Api::SysCallIntResult with rc_ = 0 for success and rc = -1 for failure. If the call
-   * is successful, errno_ shouldn't be used.
-   */
-  static Api::SysCallIntResult setSocketOption(Socket& socket, Network::SocketOptionName optname,
-                                               absl::string_view value);
+  static int setSocketOption(Socket& socket, Network::SocketOptionName optname,
+                             absl::string_view value);
 
 private:
   const envoy::api::v2::core::SocketOption::SocketState in_state_;

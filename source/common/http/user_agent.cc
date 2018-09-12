@@ -4,8 +4,7 @@
 #include <string>
 
 #include "envoy/network/connection.h"
-#include "envoy/stats/scope.h"
-#include "envoy/stats/timespan.h"
+#include "envoy/stats/stats.h"
 
 #include "common/http/headers.h"
 

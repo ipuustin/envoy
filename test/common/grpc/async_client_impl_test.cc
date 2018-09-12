@@ -4,16 +4,15 @@
 #include "test/mocks/tracing/mocks.h"
 #include "test/mocks/upstream/mocks.h"
 #include "test/proto/helloworld.pb.h"
-#include "test/test_common/test_time.h"
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::Invoke;
 using testing::Return;
 using testing::ReturnRef;
 using testing::Throw;
+using testing::_;
 
 namespace Envoy {
 namespace Grpc {
@@ -25,7 +24,7 @@ public:
       : method_descriptor_(helloworld::Greeter::descriptor()->FindMethodByName("SayHello")) {
     envoy::api::v2::core::GrpcService config;
     config.mutable_envoy_grpc()->set_cluster_name("test_cluster");
-    grpc_client_ = std::make_unique<AsyncClientImpl>(cm_, config, test_time_.timeSource());
+    grpc_client_ = std::make_unique<AsyncClientImpl>(cm_, config);
     ON_CALL(cm_, httpAsyncClientForCluster("test_cluster")).WillByDefault(ReturnRef(http_client_));
   }
 
@@ -33,7 +32,6 @@ public:
   NiceMock<Http::MockAsyncClient> http_client_;
   NiceMock<Upstream::MockClusterManager> cm_;
   std::unique_ptr<AsyncClientImpl> grpc_client_;
-  DangerousDeprecatedTestTime test_time_;
 };
 
 // Validate that a failure in the HTTP client returns immediately with status

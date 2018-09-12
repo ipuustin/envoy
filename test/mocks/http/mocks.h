@@ -210,7 +210,7 @@ public:
           encodeHeaders(std::move(headers), end_stream);
         },
         [this](Buffer::Instance& data, bool end_stream) -> void { encodeData(data, end_stream); },
-        stream_destroyed_, code, body, is_head_request_);
+        stream_destroyed_, code, body);
   }
   void encode100ContinueHeaders(HeaderMapPtr&& headers) override {
     encode100ContinueHeaders_(*headers);
@@ -222,7 +222,6 @@ public:
 
   MOCK_METHOD0(continueDecoding, void());
   MOCK_METHOD2(addDecodedData, void(Buffer::Instance& data, bool streaming));
-  MOCK_METHOD0(addDecodedTrailers, HeaderMap&());
   MOCK_METHOD0(decodingBuffer, const Buffer::Instance*());
   MOCK_METHOD1(encode100ContinueHeaders_, void(HeaderMap& headers));
   MOCK_METHOD2(encodeHeaders_, void(HeaderMap& headers, bool end_stream));
@@ -234,7 +233,6 @@ public:
   testing::NiceMock<Tracing::MockSpan> active_span_;
   testing::NiceMock<Tracing::MockConfig> tracing_config_;
   bool is_grpc_request_{};
-  bool is_head_request_{false};
   bool stream_destroyed_{};
 };
 
@@ -261,7 +259,6 @@ public:
 
   // Http::StreamEncoderFilterCallbacks
   MOCK_METHOD2(addEncodedData, void(Buffer::Instance& data, bool streaming));
-  MOCK_METHOD0(addEncodedTrailers, HeaderMap&());
   MOCK_METHOD0(continueEncoding, void());
   MOCK_METHOD0(encodingBuffer, const Buffer::Instance*());
 
@@ -462,22 +459,5 @@ MATCHER_P(HeaderMapEqual, rhs, "") {
 MATCHER_P(HeaderMapEqualRef, rhs, "") {
   const Http::HeaderMapImpl& lhs = *dynamic_cast<const Http::HeaderMapImpl*>(&arg);
   return lhs == *dynamic_cast<const Http::HeaderMapImpl*>(rhs);
-}
-
-// Test that a HeaderMapPtr argument includes a given key-value pair, e.g.,
-//  HeaderHasValue("Upgrade", "WebSocket")
-MATCHER_P2(HeaderHasValue, key, value,
-           std::string(negation ? "doesn't have" : "has") + " a header " + key + " with value \"" +
-               value + "\"") {
-  const Envoy::Http::HeaderEntry* entry = arg->get(Envoy::Http::LowerCaseString(key));
-  return entry != nullptr && entry->value() == value;
-}
-
-// Like HeaderHasValue, but matches against a (const) HeaderMap& argument.
-MATCHER_P2(HeaderHasValueRef, key, value,
-           std::string(negation ? "doesn't have" : "has") + " a header " + key + " with value \"" +
-               value + "\"") {
-  const Envoy::Http::HeaderEntry* entry = arg.get(Envoy::Http::LowerCaseString(key));
-  return entry != nullptr && entry->value() == value;
 }
 } // namespace Envoy

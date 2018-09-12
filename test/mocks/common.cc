@@ -4,11 +4,11 @@ namespace Envoy {
 ReadyWatcher::ReadyWatcher() {}
 ReadyWatcher::~ReadyWatcher() {}
 
-MockTimeSource::MockTimeSource() {}
-MockTimeSource::~MockTimeSource() {}
+MockSystemTimeSource::MockSystemTimeSource() {}
+MockSystemTimeSource::~MockSystemTimeSource() {}
 
-MockTimeSystem::MockTimeSystem() {}
-MockTimeSystem::~MockTimeSystem() {}
+MockMonotonicTimeSource::MockMonotonicTimeSource() {}
+MockMonotonicTimeSource::~MockMonotonicTimeSource() {}
 
 MockTokenBucket::MockTokenBucket() {}
 MockTokenBucket::~MockTokenBucket() {}

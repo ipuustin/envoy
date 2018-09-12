@@ -5,8 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "envoy/stats/scope.h"
-
 #include "common/common/assert.h"
 #include "common/common/fmt.h"
 

@@ -11,7 +11,6 @@
 #include "envoy/common/exception.h"
 #include "envoy/runtime/runtime.h"
 #include "envoy/stats/stats_macros.h"
-#include "envoy/stats/store.h"
 #include "envoy/thread_local/thread_local.h"
 
 #include "common/common/empty_string.h"

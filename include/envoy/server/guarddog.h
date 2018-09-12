@@ -2,6 +2,7 @@
 
 #include "envoy/common/pure.h"
 #include "envoy/server/watchdog.h"
+#include "envoy/stats/stats.h"
 
 namespace Envoy {
 namespace Server {

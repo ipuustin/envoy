@@ -2,12 +2,11 @@
 
 set -e
 
-# Pin to this commit to pick up fix for building on Visual Studio 15.8
-COMMIT=0f9a586ca1dc29c2ecb8dd715a315b93e3f40f79 # 2018-06-30
+VERSION=0.6.2
 
-curl https://github.com/jbeder/yaml-cpp/archive/"$COMMIT".tar.gz -sLo yaml-cpp-"$COMMIT".tar.gz
-tar xf yaml-cpp-"$COMMIT".tar.gz
-cd yaml-cpp-"$COMMIT"
+curl https://github.com/jbeder/yaml-cpp/archive/yaml-cpp-"$VERSION".tar.gz -sLo yaml-cpp-"$VERSION".tar.gz
+tar xf yaml-cpp-"$VERSION".tar.gz
+cd yaml-cpp-yaml-cpp-"$VERSION"
 
 mkdir build
 cd build

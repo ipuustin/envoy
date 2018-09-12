@@ -13,13 +13,12 @@
 #include "common/common/lock_guard.h"
 #include "common/common/logger.h"
 #include "common/common/thread.h"
-#include "common/stats/source_impl.h"
+#include "common/stats/stats_impl.h"
 
 #include "server/server.h"
 #include "server/test_hooks.h"
 
 #include "test/integration/server_stats.h"
-#include "test/test_common/test_time.h"
 #include "test/test_common/utility.h"
 
 namespace Envoy {
@@ -141,12 +140,12 @@ public:
     return wrapped_scope_->histogram(name);
   }
 
-  const StatsOptions& statsOptions() const override { return stats_options_; }
+  const Stats::StatsOptions& statsOptions() const override { return stats_options_; }
 
 private:
   Thread::MutexBasicLockable& lock_;
   ScopePtr wrapped_scope_;
-  StatsOptionsImpl stats_options_;
+  Stats::StatsOptionsImpl stats_options_;
 };
 
 /**
@@ -174,7 +173,7 @@ public:
     Thread::LockGuard lock(lock_);
     return store_.histogram(name);
   }
-  const StatsOptions& statsOptions() const override { return stats_options_; }
+  const Stats::StatsOptions& statsOptions() const override { return stats_options_; }
 
   // Stats::Store
   std::vector<CounterSharedPtr> counters() const override {
@@ -203,7 +202,7 @@ private:
   mutable Thread::MutexBasicLockable lock_;
   IsolatedStoreImpl store_;
   SourceImpl source_;
-  StatsOptionsImpl stats_options_;
+  Stats::StatsOptionsImpl stats_options_;
 };
 
 } // namespace Stats
@@ -238,6 +237,7 @@ public:
   }
   void start(const Network::Address::IpVersion version,
              std::function<void()> pre_worker_start_test_steps, bool deterministic);
+  void start();
 
   void waitForCounterGe(const std::string& name, uint64_t value) override {
     while (counter(name) == nullptr || counter(name)->value() < value) {
@@ -301,14 +301,12 @@ private:
   Thread::CondVar listeners_cv_;
   Thread::MutexBasicLockable listeners_mutex_;
   uint64_t pending_listeners_;
-  DangerousDeprecatedTestTime test_time_;
   ConditionalInitializer server_set_;
   std::unique_ptr<Server::InstanceImpl> server_;
   Server::TestDrainManager* drain_manager_{};
   Stats::Store* stat_store_{};
   std::function<void()> on_worker_listener_added_cb_;
   std::function<void()> on_worker_listener_removed_cb_;
-  Network::Address::InstanceConstSharedPtr admin_address_;
 };
 
 } // namespace Envoy

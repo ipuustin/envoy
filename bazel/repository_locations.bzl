@@ -1,11 +1,6 @@
 REPOSITORY_LOCATIONS = dict(
-    boringssl = dict(
-        # Use commits from branch "chromium-stable-with-bazel"
-        commit = "ab36a84b91b3116bacc85973995504818748d8a9",  # chromium-69.0.3497.81
-        remote = "https://github.com/google/boringssl",
-    ),
     com_google_absl = dict(
-        commit = "92e07e5590752d6b8e67f7f2f86c6286561e8cea",  # 2018-08-01
+        commit = "92020a042c0cd46979db9f6f0cb32783dc07765e",  # 2018-06-08
         remote = "https://github.com/abseil/abseil-cpp",
     ),
     com_github_apache_thrift = dict(
@@ -48,14 +43,8 @@ REPOSITORY_LOCATIONS = dict(
         remote = "https://github.com/google/libprotobuf-mutator",
     ),
     com_github_grpc_grpc = dict(
-        commit = "3eedb606a07738e5446ba852085f676b134ecca4",  # v1.14.0
+        commit = "bec3b5ada2c5e5d782dff0b7b5018df646b65cb0",  # v1.12.0
         remote = "https://github.com/grpc/grpc.git",
-    ),
-    com_github_nanopb_nanopb = dict(
-        # From: https://github.com/grpc/grpc/blob/v1.14.0/bazel/grpc_deps.bzl#L123
-        sha256 = "8bbbb1e78d4ddb0a1919276924ab10d11b631df48b657d960e0c795a25515735",
-        strip_prefix = "nanopb-f8ac463766281625ad710900479130c7fcb4d63b",
-        urls = ["https://github.com/nanopb/nanopb/archive/f8ac463766281625ad710900479130c7fcb4d63b.tar.gz"],
     ),
     io_opentracing_cpp = dict(
         commit = "3b36b084a4d7fffc196eac83203cf24dfb8696b3",  # v1.4.2
@@ -70,8 +59,10 @@ REPOSITORY_LOCATIONS = dict(
         remote = "https://github.com/google/googleapis",
     ),
     com_github_google_jwt_verify = dict(
-        commit = "4eb9e96485b71e00d43acc7207501caafb085b4a",
-        remote = "https://github.com/google/jwt_verify_lib",
+#        commit = "4eb9e96485b71e00d43acc7207501caafb085b4a",
+#        remote = "https://github.com/google/jwt_verify_lib",
+       commit = "openssl",
+       remote = "https://github.com/bdecoste/jwt_verify_lib",
     ),
     com_github_nodejs_http_parser = dict(
         # 2018-07-20 snapshot to pick up:
@@ -109,7 +100,7 @@ REPOSITORY_LOCATIONS = dict(
         strip_prefix = "twitter.common.finagle-thrift-0.3.9/src",
     ),
     com_google_googletest = dict(
-        commit = "3d5612182581df64acc12d2633e473decf5adc47",  # Aug 29, 2018
+        commit = "43863938377a9ea1399c0596269e0890b5c5515a",
         remote = "https://github.com/google/googletest",
     ),
     com_google_protobuf = dict(

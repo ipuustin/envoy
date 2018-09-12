@@ -4,7 +4,6 @@ import "validate/validate.proto";
 import "envoy/api/v2/core/address.proto";
 import "envoy/api/v2/route/route.proto";
 import "envoy/type/matcher/metadata.proto";
-import "envoy/type/matcher/string.proto";
 
 package envoy.config.rbac.v2alpha;
 option go_package = "v2alpha";
@@ -31,12 +30,8 @@ option go_package = "v2alpha";
 //       permissions:
 //         - any: true
 //       principals:
-//         - authenticated:
-//             principal_name:
-//               exact: "cluster.local/ns/default/sa/admin"
-//         - authenticated:
-//             principal_name:
-//               exact: "cluster.local/ns/default/sa/superuser"
+//         - authenticated: { name: "cluster.local/ns/default/sa/admin" }
+//         - authenticated: { name: "cluster.local/ns/default/sa/superuser" }
 //     "product-viewer":
 //       permissions:
 //           - and_rules:
@@ -108,8 +103,7 @@ message Permission {
     // When any is set, it matches any action.
     bool any = 3 [(validate.rules).bool.const = true];
 
-    // A header (or psuedo-header such as :path or :method) on the incoming HTTP request. Only
-    // available for HTTP request.
+    // A header (or psuedo-header such as :path or :method) on the incoming HTTP request.
     envoy.api.v2.route.HeaderMatcher header = 4;
 
     // A CIDR block that describes the destination IP.
@@ -118,8 +112,7 @@ message Permission {
     // A port number that describes the destination port connecting to.
     uint32 destination_port = 6 [(validate.rules).uint32.lte = 65535];
 
-    // Metadata that describes additional information about the action. Only available for HTTP
-    // request.
+    // Metadata that describes additional information about the action.
     envoy.type.matcher.MetadataMatcher metadata = 7;
 
     // Negates matching the provided permission. For instance, if the value of `not_rule` would
@@ -140,12 +133,9 @@ message Principal {
 
   // Authentication attributes for a downstream.
   message Authenticated {
-    reserved 1;
-    reserved "name";
-
-    // The name of the principal. If set, The URI SAN is used from the certificate, otherwise the
+    // The name of the principal. If set, the URI SAN is used from the certificate, otherwise the
     // subject field is used. If unset, it applies to any user that is authenticated.
-    envoy.type.matcher.StringMatcher principal_name = 2;
+    string name = 1;
   }
 
   oneof identifier {
@@ -166,12 +156,10 @@ message Principal {
     // A CIDR block that describes the downstream IP.
     envoy.api.v2.core.CidrRange source_ip = 5;
 
-    // A header (or psuedo-header such as :path or :method) on the incoming HTTP request. Only
-    // available for HTTP request.
+    // A header (or psuedo-header such as :path or :method) on the incoming HTTP request.
     envoy.api.v2.route.HeaderMatcher header = 6;
 
-    // Metadata that describes additional information about the principal. Only available for HTTP
-    // request.
+    // Metadata that describes additional information about the principal.
     envoy.type.matcher.MetadataMatcher metadata = 7;
 
     // Negates matching the provided principal. For instance, if the value of `not_id` would match,

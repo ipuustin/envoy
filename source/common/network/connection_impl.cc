@@ -68,7 +68,7 @@ ConnectionImpl::ConnectionImpl(Event::Dispatcher& dispatcher, ConnectionSocketPt
 }
 
 ConnectionImpl::~ConnectionImpl() {
-  ASSERT(fd() == -1, "ConnectionImpl was unexpectedly torn down without being closed.");
+  ASSERT(fd() == -1);
 
   // In general we assume that owning code has called close() previously to the destructor being
   // run. This generally must be done so that callbacks run in the correct context (vs. deferred
@@ -504,9 +504,7 @@ void ConnectionImpl::onWriteReady() {
 }
 
 void ConnectionImpl::setConnectionStats(const ConnectionStats& stats) {
-  ASSERT(!connection_stats_,
-         "Two network filters are attempting to set connection stats. This indicates an issue "
-         "with the configured filter chain.");
+  ASSERT(!connection_stats_);
   connection_stats_.reset(new ConnectionStats(stats));
 }
 
@@ -542,51 +540,47 @@ ClientConnectionImpl::ClientConnectionImpl(
     const Network::ConnectionSocket::OptionsSharedPtr& options)
     : ConnectionImpl(dispatcher, std::make_unique<ClientSocketImpl>(remote_address),
                      std::move(transport_socket), false) {
-  // There are no meaningful socket options or source address semantics for
-  // non-IP sockets, so skip.
-  if (remote_address->ip() != nullptr) {
-    if (!Network::Socket::applyOptions(options, *socket_,
-                                       envoy::api::v2::core::SocketOption::STATE_PREBIND)) {
+  if (!Network::Socket::applyOptions(options, *socket_,
+                                     envoy::api::v2::core::SocketOption::STATE_PREBIND)) {
+    // Set a special error state to ensure asynchronous close to give the owner of the
+    // ConnectionImpl a chance to add callbacks and detect the "disconnect".
+    immediate_error_event_ = ConnectionEvent::LocalClose;
+    // Trigger a write event to close this connection out-of-band.
+    file_event_->activate(Event::FileReadyType::Write);
+    return;
+  }
+
+  if (source_address != nullptr) {
+    const int rc = source_address->bind(fd());
+    if (rc < 0) {
+      ENVOY_LOG_MISC(debug, "Bind failure. Failed to bind to {}: {}", source_address->asString(),
+                     strerror(errno));
+      bind_error_ = true;
       // Set a special error state to ensure asynchronous close to give the owner of the
       // ConnectionImpl a chance to add callbacks and detect the "disconnect".
       immediate_error_event_ = ConnectionEvent::LocalClose;
+
       // Trigger a write event to close this connection out-of-band.
       file_event_->activate(Event::FileReadyType::Write);
-      return;
-    }
-
-    if (source_address != nullptr) {
-      const Api::SysCallIntResult result = source_address->bind(fd());
-      if (result.rc_ < 0) {
-        ENVOY_LOG_MISC(debug, "Bind failure. Failed to bind to {}: {}", source_address->asString(),
-                       strerror(result.errno_));
-        bind_error_ = true;
-        // Set a special error state to ensure asynchronous close to give the owner of the
-        // ConnectionImpl a chance to add callbacks and detect the "disconnect".
-        immediate_error_event_ = ConnectionEvent::LocalClose;
-
-        // Trigger a write event to close this connection out-of-band.
-        file_event_->activate(Event::FileReadyType::Write);
-      }
     }
   }
 }
 
 void ClientConnectionImpl::connect() {
   ENVOY_CONN_LOG(debug, "connecting to {}", *this, socket_->remoteAddress()->asString());
-  const Api::SysCallIntResult result = socket_->remoteAddress()->connect(fd());
-  if (result.rc_ == 0) {
+  const int rc = socket_->remoteAddress()->connect(fd());
+  if (rc == 0) {
     // write will become ready.
     ASSERT(connecting_);
   } else {
-    ASSERT(result.rc_ == -1);
-    if (result.errno_ == EINPROGRESS) {
+    ASSERT(rc == -1);
+    if (errno == EINPROGRESS) {
       ASSERT(connecting_);
       ENVOY_CONN_LOG(debug, "connection in progress", *this);
     } else {
       immediate_error_event_ = ConnectionEvent::RemoteClose;
       connecting_ = false;
-      ENVOY_CONN_LOG(debug, "immediate connection error: {}", *this, result.errno_);
+      ENVOY_CONN_LOG(debug, "immediate connection error: {}", *this, errno);
 
       // Trigger a write event. This is needed on OSX and seems harmless on Linux.
       file_event_->activate(Event::FileReadyType::Write);

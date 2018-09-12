@@ -16,11 +16,11 @@ namespace Envoy {
 namespace Network {
 
 void ListenSocketImpl::doBind() {
-  const Api::SysCallIntResult result = local_address_->bind(fd_);
-  if (result.rc_ == -1) {
+  int rc = local_address_->bind(fd_);
+  if (rc == -1) {
     close();
     throw EnvoyException(
-        fmt::format("cannot bind '{}': {}", local_address_->asString(), strerror(result.errno_)));
+        fmt::format("cannot bind '{}': {}", local_address_->asString(), strerror(errno)));
   }
   if (local_address_->type() == Address::Type::Ip && local_address_->ip()->port() == 0) {
     // If the port we bind is zero, then the OS will pick a free port for us (assuming there are

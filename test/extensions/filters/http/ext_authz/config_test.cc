@@ -1,5 +1,4 @@
 #include "envoy/config/filter/http/ext_authz/v2alpha/ext_authz.pb.validate.h"
-#include "envoy/stats/scope.h"
 
 #include "extensions/filters/http/ext_authz/config.h"
 
@@ -8,8 +7,8 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::Invoke;
+using testing::_;
 
 namespace Envoy {
 namespace Extensions {
@@ -52,10 +51,9 @@ TEST(HttpExtAuthzConfigTest, CorrectProtoHttp) {
       cluster: "ext_authz"
       timeout: 0.25s
     path_prefix: "/test"
-    allowed_authorization_headers:
+    response_headers_to_remove:
       - foo_header_key
-    allowed_request_headers:
-      - bar_header_key
+      - baz_header_key
   failure_mode_allow: true
   )EOF";
 

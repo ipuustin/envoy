@@ -10,7 +10,6 @@
 #include "envoy/network/filter.h"
 #include "envoy/ratelimit/ratelimit.h"
 #include "envoy/runtime/runtime.h"
-#include "envoy/stats/scope.h"
 #include "envoy/stats/stats_macros.h"
 
 namespace Envoy {
@@ -27,7 +26,6 @@ namespace RateLimitFilter {
   COUNTER(error)                                                                                   \
   COUNTER(over_limit)                                                                              \
   COUNTER(ok)                                                                                      \
-  COUNTER(failure_mode_allowed)                                                                    \
   COUNTER(cx_closed)                                                                               \
   GAUGE  (active)
 // clang-format on
@@ -50,7 +48,6 @@ public:
   const std::vector<RateLimit::Descriptor>& descriptors() { return descriptors_; }
   Runtime::Loader& runtime() { return runtime_; }
   const InstanceStats& stats() { return stats_; }
-  bool failureModeAllow() const { return !failure_mode_deny_; };
 
 private:
   static InstanceStats generateStats(const std::string& name, Stats::Scope& scope);
@@ -59,7 +56,6 @@ private:
   std::vector<RateLimit::Descriptor> descriptors_;
   const InstanceStats stats_;
   Runtime::Loader& runtime_;
-  const bool failure_mode_deny_;
 };
 
 typedef std::shared_ptr<Config> ConfigSharedPtr;
@@ -91,7 +87,7 @@ public:
   void onBelowWriteBufferLowWatermark() override {}
 
   // RateLimit::RequestCallbacks
-  void complete(RateLimit::LimitStatus status, Http::HeaderMapPtr&& headers) override;
+  void complete(RateLimit::LimitStatus status) override;
 
 private:
   enum class Status { NotStarted, Calling, Complete };
@@ -102,7 +98,7 @@ private:
   Status status_{Status::NotStarted};
   bool calling_limit_{};
 };
-} // namespace RateLimitFilter
+}
 } // namespace NetworkFilters
 } // namespace Extensions
 } // namespace Envoy

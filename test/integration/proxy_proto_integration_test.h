@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/http/codec_client.h"
+#include "common/stats/stats_impl.h"
 
 #include "test/integration/fake_upstream.h"
 #include "test/integration/http_integration.h"

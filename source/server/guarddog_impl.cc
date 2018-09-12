@@ -2,8 +2,6 @@
 
 #include <chrono>
 
-#include "envoy/stats/scope.h"
-
 #include "common/common/assert.h"
 #include "common/common/fmt.h"
 #include "common/common/lock_guard.h"
@@ -14,7 +12,7 @@ namespace Envoy {
 namespace Server {
 
 GuardDogImpl::GuardDogImpl(Stats::Scope& stats_scope, const Server::Configuration::Main& config,
-                           TimeSource& tsource)
+                           MonotonicTimeSource& tsource)
     : time_source_(tsource), miss_timeout_(config.wdMissTimeout()),
       megamiss_timeout_(config.wdMegaMissTimeout()), kill_timeout_(config.wdKillTimeout()),
       multi_kill_timeout_(config.wdMultiKillTimeout()),
@@ -37,7 +35,7 @@ GuardDogImpl::~GuardDogImpl() { stop(); }
 
 void GuardDogImpl::threadRoutine() {
   do {
-    const auto now = time_source_.monotonicTime();
+    const auto now = time_source_.currentTime();
     bool seen_one_multi_timeout(false);
     Thread::LockGuard guard(wd_lock_);
     for (auto& watched_dog : watched_dogs_) {

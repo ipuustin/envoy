@@ -3,7 +3,6 @@
 #include "envoy/event/dispatcher.h"
 #include "envoy/event/timer.h"
 #include "envoy/network/filter.h"
-#include "envoy/stats/scope.h"
 #include "envoy/stats/timespan.h"
 
 #include "common/network/connection_impl.h"

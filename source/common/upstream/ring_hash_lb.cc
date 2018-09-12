@@ -1,7 +1,6 @@
 #include "common/upstream/ring_hash_lb.h"
 
 #include <cstdint>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -126,8 +125,9 @@ RingHashLoadBalancer::Ring::Ring(
   std::sort(ring_.begin(), ring_.end(), [](const RingEntry& lhs, const RingEntry& rhs) -> bool {
     return lhs.hash_ < rhs.hash_;
   });
+
   if (ENVOY_LOG_CHECK_LEVEL(trace)) {
-    for (const auto& entry : ring_) {
+    for (auto entry : ring_) {
       ENVOY_LOG(trace, "ring hash: host={} hash={}", entry.host_->address()->asString(),
                 entry.hash_);
     }

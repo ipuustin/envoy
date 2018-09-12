@@ -1,5 +1,4 @@
 load("@com_google_protobuf//:protobuf.bzl", "cc_proto_library", "py_proto_library")
-load("@envoy_api//bazel:api_build_system.bzl", "api_proto_library")
 
 def envoy_package():
     native.package(default_visibility = ["//visibility:public"])
@@ -234,7 +233,7 @@ def envoy_cc_binary(
     )
 
 # Envoy C++ fuzz test targes. These are not included in coverage runs.
-def envoy_cc_fuzz_test(name, corpus, deps = [], tags = [], **kwargs):
+def envoy_cc_fuzz_test(name, corpus, deps = [], **kwargs):
     test_lib_name = name + "_lib"
     envoy_cc_test_library(
         name = test_lib_name,
@@ -256,7 +255,6 @@ def envoy_cc_fuzz_test(name, corpus, deps = [], tags = [], **kwargs):
                 "//test/fuzz:main",
             ],
         }),
-        tags = tags,
     )
     native.cc_binary(
         name = name + "_driverless",
@@ -265,7 +263,7 @@ def envoy_cc_fuzz_test(name, corpus, deps = [], tags = [], **kwargs):
         linkstatic = 1,
         testonly = 1,
         deps = [":" + test_lib_name],
-        tags = ["manual"] + tags,
+        tags = ["manual"],
     )
 
 # Envoy C++ test targets should be specified with this function.
@@ -399,22 +397,54 @@ def _proto_header(proto_path):
     return None
 
 # Envoy proto targets should be specified with this function.
-def envoy_proto_library(name, external_deps = [], **kwargs):
-    external_proto_deps = []
-    external_cc_proto_deps = []
-    if "api_httpbody_protos" in external_deps:
-        external_cc_proto_deps.append("@googleapis//:api_httpbody_protos")
-        external_proto_deps.append("@googleapis//:api_httpbody_protos_proto")
-    return api_proto_library(
+def envoy_proto_library(
         name,
-        external_cc_proto_deps = external_cc_proto_deps,
-        external_proto_deps = external_proto_deps,
+        srcs = [],
+        deps = [],
+        external_deps = [],
+        generate_python = True):
+    # Ideally this would be native.{proto_library, cc_proto_library}.
+    # Unfortunately, this doesn't work with http_api_protos due to the PGV
+    # requirement to also use them in the non-native protobuf.bzl
+    # cc_proto_library; you end up with the same file built twice. So, also
+    # using protobuf.bzl cc_proto_library here.
+    cc_proto_deps = []
+    py_proto_deps = ["@com_google_protobuf//:protobuf_python"]
+
+    if "api_httpbody_protos" in external_deps:
+        cc_proto_deps.append("@googleapis//:api_httpbody_protos")
+        py_proto_deps.append("@googleapis//:api_httpbody_protos_py")
+
+    if "http_api_protos" in external_deps:
+        cc_proto_deps.append("@googleapis//:http_api_protos")
+        py_proto_deps.append("@googleapis//:http_api_protos_py")
+
+    if "well_known_protos" in external_deps:
+        # WKT is already included for Python as part of standard deps above.
+        cc_proto_deps.append("@com_google_protobuf//:cc_wkt_protos")
+
+    cc_proto_library(
+        name = name,
+        srcs = srcs,
+        default_runtime = "@com_google_protobuf//:protobuf",
+        protoc = "@com_google_protobuf//:protoc",
+        deps = deps + cc_proto_deps,
         # Avoid generating .so, we don't need it, can interfere with builds
         # such as OSS-Fuzz.
         linkstatic = 1,
+        alwayslink = 1,
         visibility = ["//visibility:public"],
-        **kwargs
     )
+
+    if generate_python:
+        py_proto_library(
+            name = name + "_py",
+            srcs = srcs,
+            default_runtime = "@com_google_protobuf//:protobuf_python",
+            protoc = "@com_google_protobuf//:protoc",
+            deps = deps + py_proto_deps,
+            visibility = ["//visibility:public"],
+        )
 
 # Envoy proto descriptor targets should be specified with this function.
 # This is used for testing only.

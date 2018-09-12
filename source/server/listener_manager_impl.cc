@@ -3,7 +3,6 @@
 #include "envoy/admin/v2alpha/config_dump.pb.h"
 #include "envoy/registry/registry.h"
 #include "envoy/server/transport_socket_config.h"
-#include "envoy/stats/scope.h"
 
 #include "common/api/os_sys_calls_impl.h"
 #include "common/common/assert.h"
@@ -18,7 +17,6 @@
 
 #include "server/configuration_impl.h"
 #include "server/drain_manager_impl.h"
-#include "server/transport_socket_config_impl.h"
 
 #include "extensions/filters/listener/well_known_names.h"
 #include "extensions/filters/network/well_known_names.h"
@@ -227,16 +225,12 @@ ListenerImpl::ListenerImpl(const envoy::api::v2::Listener& config, const std::st
     std::vector<std::string> application_protocols(
         filter_chain_match.application_protocols().begin(),
         filter_chain_match.application_protocols().end());
-    Server::Configuration::TransportSocketFactoryContextImpl factory_context(
-        parent_.server_.sslContextManager(), *listener_scope_, parent_.server_.clusterManager(),
-        parent_.server_.localInfo(), parent_.server_.dispatcher(), parent_.server_.random(),
-        parent_.server_.stats());
-    factory_context.setInitManager(initManager());
-    addFilterChain(
-        PROTOBUF_GET_WRAPPED_OR_DEFAULT(filter_chain_match, destination_port, 0), destination_ips,
-        server_names, filter_chain_match.transport_protocol(), application_protocols,
-        config_factory.createTransportSocketFactory(*message, factory_context, server_names),
-        parent_.factory_.createNetworkFilterFactoryList(filter_chain.filters(), *this));
+
+    addFilterChain(PROTOBUF_GET_WRAPPED_OR_DEFAULT(filter_chain_match, destination_port, 0),
+                   destination_ips, server_names, filter_chain_match.transport_protocol(),
+                   application_protocols,
+                   config_factory.createTransportSocketFactory(*message, *this, server_names),
+                   parent_.factory_.createNetworkFilterFactoryList(filter_chain.filters(), *this));
 
     need_tls_inspector |= filter_chain_match.transport_protocol() == "tls" ||
                           (filter_chain_match.transport_protocol().empty() &&
@@ -526,7 +520,7 @@ void ListenerImpl::debugLog(const std::string& message) {
 }
 
 void ListenerImpl::initialize() {
-  last_updated_ = timeSource().systemTime();
+  last_updated_ = systemTimeSource().currentTime();
   // If workers have already started, we shift from using the global init manager to using a local
   // per listener init manager. See ~ListenerImpl() for why we gate the onListenerWarmed() call
   // with initialize_canceled_.
@@ -573,12 +567,13 @@ void ListenerImpl::setSocket(const Network::SocketSharedPtr& socket) {
 
 ListenerManagerImpl::ListenerManagerImpl(Instance& server,
                                          ListenerComponentFactory& listener_factory,
-                                         WorkerFactory& worker_factory, TimeSource& time_source)
-    : server_(server), time_source_(time_source), factory_(listener_factory),
+                                         WorkerFactory& worker_factory,
+                                         SystemTimeSource& system_time_source)
+    : server_(server), system_time_source_(system_time_source), factory_(listener_factory),
       stats_(generateStats(server.stats())),
       config_tracker_entry_(server.admin().getConfigTracker().add(
           "listeners", [this] { return dumpListenerConfigs(); })) {
-  for (uint32_t i = 0; i < server.options().concurrency(); i++) {
+  for (uint32_t i = 0; i < std::max(1U, server.options().concurrency()); i++) {
     workers_.emplace_back(worker_factory.createWorker());
   }
 }

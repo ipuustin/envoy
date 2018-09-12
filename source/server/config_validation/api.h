@@ -1,7 +1,6 @@
 #pragma once
 
 #include "envoy/api/api.h"
-#include "envoy/event/timer.h"
 #include "envoy/filesystem/filesystem.h"
 
 #include "common/api/api_impl.h"
@@ -17,7 +16,7 @@ class ValidationImpl : public Impl {
 public:
   ValidationImpl(std::chrono::milliseconds file_flush_interval_msec);
 
-  Event::DispatcherPtr allocateDispatcher(Event::TimeSystem&) override;
+  Event::DispatcherPtr allocateDispatcher() override;
 };
 
 } // namespace Api

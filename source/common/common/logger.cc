@@ -88,5 +88,5 @@ void Registry::setLogFormat(const std::string& log_format) {
   }
 }
 
-} // namespace Logger
+} // Logger
 } // namespace Envoy

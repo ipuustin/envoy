@@ -15,7 +15,6 @@
 #include "envoy/runtime/runtime.h"
 #include "envoy/secret/secret_manager.h"
 #include "envoy/ssl/context_manager.h"
-#include "envoy/stats/scope.h"
 #include "envoy/thread_local/thread_local.h"
 #include "envoy/upstream/cluster_manager.h"
 
@@ -139,10 +138,6 @@ private:
   COUNTER(cluster_added)                                                                           \
   COUNTER(cluster_modified)                                                                        \
   COUNTER(cluster_removed)                                                                         \
-  COUNTER(cluster_updated)                                                                         \
-  COUNTER(cluster_updated_via_merge)                                                               \
-  COUNTER(update_merge_cancelled)                                                                  \
-  COUNTER(update_out_of_merge_window)                                                              \
   GAUGE  (active_clusters)                                                                         \
   GAUGE  (warming_clusters)
 // clang-format on
@@ -165,7 +160,9 @@ public:
                      ThreadLocal::Instance& tls, Runtime::Loader& runtime,
                      Runtime::RandomGenerator& random, const LocalInfo::LocalInfo& local_info,
                      AccessLog::AccessLogManager& log_manager,
-                     Event::Dispatcher& main_thread_dispatcher, Server::Admin& admin);
+                     Event::Dispatcher& main_thread_dispatcher, Server::Admin& admin,
+                     SystemTimeSource& system_time_source,
+                     MonotonicTimeSource& monotonic_time_source);
 
   // Upstream::ClusterManager
   bool addOrUpdateCluster(const envoy::api::v2::Cluster& cluster,
@@ -211,12 +208,6 @@ public:
   addThreadLocalClusterUpdateCallbacks(ClusterUpdateCallbacks&) override;
 
   ClusterManagerFactory& clusterManagerFactory() override { return factory_; }
-  TimeSource& timeSource() override { return time_source_; }
-
-protected:
-  virtual void postThreadLocalClusterUpdate(const Cluster& cluster, uint32_t priority,
-                                            const HostVector& hosts_added,
-                                            const HostVector& hosts_removed);
 
 private:
   /**
@@ -330,10 +321,11 @@ private:
 
   struct ClusterData {
     ClusterData(const envoy::api::v2::Cluster& cluster_config, const std::string& version_info,
-                bool added_via_api, ClusterSharedPtr&& cluster, TimeSource& time_source)
+                bool added_via_api, ClusterSharedPtr&& cluster,
+                SystemTimeSource& system_time_source)
         : cluster_config_(cluster_config), config_hash_(MessageUtil::hash(cluster_config)),
           version_info_(version_info), added_via_api_(added_via_api), cluster_(std::move(cluster)),
-          last_updated_(time_source.systemTime()) {}
+          last_updated_(system_time_source.currentTime()) {}
 
     bool blockUpdate(uint64_t hash) { return !added_via_api_ || config_hash_ == hash; }
 
@@ -369,48 +361,14 @@ private:
   // This map is ordered so that config dumping is consistent.
   typedef std::map<std::string, ClusterDataPtr> ClusterMap;
 
-  struct PendingUpdates {
-    ~PendingUpdates() { disableTimer(); }
-    void enableTimer(const uint64_t timeout) {
-      ASSERT(!timer_enabled_);
-      if (timer_ != nullptr) {
-        timer_->enableTimer(std::chrono::milliseconds(timeout));
-        timer_enabled_ = true;
-      }
-    }
-    bool disableTimer() {
-      const bool was_enabled = timer_enabled_;
-      if (timer_ != nullptr) {
-        timer_->disableTimer();
-        timer_enabled_ = false;
-      }
-      return was_enabled;
-    }
-
-    Event::TimerPtr timer_;
-    // TODO(rgs1): this should be part of Event::Timer's interface.
-    bool timer_enabled_{};
-    // This is default constructed to the clock's epoch:
-    // https://en.cppreference.com/w/cpp/chrono/time_point/time_point
-    //
-    // This will usually be the computer's boot time, which means that given a not very large
-    // `Cluster.CommonLbConfig.update_merge_window`, the first update will trigger immediately
-    // (the expected behavior).
-    MonotonicTime last_updated_;
-  };
-  using PendingUpdatesPtr = std::unique_ptr<PendingUpdates>;
-  using PendingUpdatesByPriorityMap = std::unordered_map<uint32_t, PendingUpdatesPtr>;
-  using PendingUpdatesByPriorityMapPtr = std::unique_ptr<PendingUpdatesByPriorityMap>;
-  using ClusterUpdatesMap = std::unordered_map<std::string, PendingUpdatesByPriorityMapPtr>;
-
-  void applyUpdates(const Cluster& cluster, uint32_t priority, PendingUpdates& updates);
-  bool scheduleUpdate(const Cluster& cluster, uint32_t priority, bool mergeable);
   void createOrUpdateThreadLocalCluster(ClusterData& cluster);
   ProtobufTypes::MessagePtr dumpClusterConfigs();
   static ClusterManagerStats generateStats(Stats::Scope& scope);
   void loadCluster(const envoy::api::v2::Cluster& cluster, const std::string& version_info,
                    bool added_via_api, ClusterMap& cluster_map);
   void onClusterInit(Cluster& cluster);
+  void postThreadLocalClusterUpdate(const Cluster& cluster, uint32_t priority,
+                                    const HostVector& hosts_added, const HostVector& hosts_removed);
   void postThreadLocalHealthFailure(const HostSharedPtr& host);
   void updateGauges();
 
@@ -435,9 +393,7 @@ private:
   std::string local_cluster_name_;
   Grpc::AsyncClientManagerPtr async_client_manager_;
   Server::ConfigTracker::EntryOwnerPtr config_tracker_entry_;
-  TimeSource& time_source_;
-  ClusterUpdatesMap updates_map_;
-  Event::Dispatcher& dispatcher_;
+  SystemTimeSource& system_time_source_;
 };
 
 } // namespace Upstream

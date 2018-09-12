@@ -23,11 +23,10 @@ const Http::HeaderMap* getZeroContentLengthHeader() {
 RawHttpClientImpl::RawHttpClientImpl(
     const std::string& cluster_name, Upstream::ClusterManager& cluster_manager,
     const absl::optional<std::chrono::milliseconds>& timeout, const std::string& path_prefix,
-    const Http::LowerCaseStrUnorderedSet& allowed_authorization_headers,
-    const Http::LowerCaseStrUnorderedSet& allowed_request_headers)
+    const std::vector<Http::LowerCaseString>& response_headers_to_remove)
     : cluster_name_(cluster_name), path_prefix_(path_prefix),
-      allowed_authorization_headers_(allowed_authorization_headers),
-      allowed_request_headers_(allowed_request_headers), timeout_(timeout), cm_(cluster_manager) {}
+      response_headers_to_remove_(response_headers_to_remove), timeout_(timeout),
+      cm_(cluster_manager) {}
 
 RawHttpClientImpl::~RawHttpClientImpl() { ASSERT(!callbacks_); }
 
@@ -44,17 +43,15 @@ void RawHttpClientImpl::check(RequestCallbacks& callbacks,
   callbacks_ = &callbacks;
 
   Http::HeaderMapPtr headers = std::make_unique<Http::HeaderMapImpl>(*getZeroContentLengthHeader());
-  for (const auto& allowed_header : allowed_request_headers_) {
-    const auto& request_header =
-        request.attributes().request().http().headers().find(allowed_header.get());
-    if (request_header != request.attributes().request().http().headers().cend()) {
-      if (allowed_header == Http::Headers::get().Path && !path_prefix_.empty()) {
-        std::string value;
-        absl::StrAppend(&value, path_prefix_, request_header->second);
-        headers->addCopy(allowed_header, value);
-      } else {
-        headers->addCopy(allowed_header, request_header->second);
-      }
+  for (const auto& header : request.attributes().request().http().headers()) {
+
+    const Http::LowerCaseString key{header.first};
+    if (key == Http::Headers::get().Path && !path_prefix_.empty()) {
+      std::string value;
+      absl::StrAppend(&value, path_prefix_, header.second);
+      headers->addCopy(key, value);
+    } else {
+      headers->addCopy(key, header.second);
     }
   }
 
@@ -69,6 +66,17 @@ void RawHttpClientImpl::onSuccess(Http::MessagePtr&& response) {
   uint64_t status_code;
   if (StringUtil::atoul(response->headers().Status()->value().c_str(), status_code)) {
     if (status_code == enumToInt(Http::Code::OK)) {
+      // Header that should not be sent to the upstream.
+      response->headers().removeStatus();
+      response->headers().removeMethod();
+      response->headers().removePath();
+      response->headers().removeContentLength();
+
+      // Optional/Configurable headers the should not be sent to the upstream.
+      for (const auto& header_to_remove : response_headers_to_remove_) {
+        response->headers().remove(header_to_remove);
+      }
+
       authz_response->status = CheckStatus::OK;
       authz_response->status_code = Http::Code::OK;
     } else {
@@ -82,13 +90,13 @@ void RawHttpClientImpl::onSuccess(Http::MessagePtr&& response) {
     authz_response->status = CheckStatus::Denied;
   }
 
-  for (const auto& allowed_header : allowed_authorization_headers_) {
-    const auto* entry = response->headers().get(allowed_header);
-    if (entry) {
-      authz_response->headers_to_add.emplace_back(Http::LowerCaseString{entry->key().c_str()},
-                                                  std::string{entry->value().c_str()});
-    }
-  }
+  response->headers().iterate(
+      [](const Http::HeaderEntry& header, void* context) -> Http::HeaderMap::Iterate {
+        static_cast<Http::HeaderVector*>(context)->emplace_back(
+            Http::LowerCaseString{header.key().c_str()}, std::string{header.value().c_str()});
+        return Http::HeaderMap::Iterate::Continue;
+      },
+      &authz_response->headers_to_add);
 
   callbacks_->onComplete(std::move(authz_response));
   callbacks_ = nullptr;

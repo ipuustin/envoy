@@ -8,7 +8,6 @@
 #include "test/mocks/common.h"
 #include "test/mocks/server/mocks.h"
 #include "test/mocks/stats/mocks.h"
-#include "test/test_common/test_time.h"
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -22,13 +21,12 @@ namespace Event {
 class DispatchedThreadTest : public testing::Test {
 protected:
   DispatchedThreadTest()
-      : config_(1000, 1000, 1000, 1000), guard_dog_(fakestats_, config_, test_time_.timeSource()),
-        thread_(test_time_.timeSource()) {}
+      : config_(1000, 1000, 1000, 1000), guard_dog_(fakestats_, config_, time_source_) {}
 
   void SetUp() { thread_.start(guard_dog_); }
   NiceMock<Server::Configuration::MockMain> config_;
   NiceMock<Stats::MockStore> fakestats_;
-  DangerousDeprecatedTestTime test_time_;
+  ProdMonotonicTimeSource time_source_;
   Envoy::Server::GuardDogImpl guard_dog_;
   DispatchedThreadImpl thread_;
 };

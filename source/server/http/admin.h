@@ -15,7 +15,6 @@
 #include "envoy/server/admin.h"
 #include "envoy/server/instance.h"
 #include "envoy/server/listener_manager.h"
-#include "envoy/stats/scope.h"
 #include "envoy/upstream/outlier_detection.h"
 #include "envoy/upstream/resource_manager.h"
 
@@ -27,7 +26,7 @@
 #include "common/http/default_server_string.h"
 #include "common/http/utility.h"
 #include "common/network/raw_buffer_socket.h"
-#include "common/stats/isolated_store_impl.h"
+#include "common/stats/stats_impl.h"
 
 #include "server/http/config_tracker_impl.h"
 
@@ -59,8 +58,6 @@ public:
   // Server::Admin
   // TODO(jsedgwick) These can be managed with a generic version of ConfigTracker.
   // Wins would be no manual removeHandler() and code reuse.
-  //
-  // The prefix must start with "/" and contain at least one additional character.
   bool addHandler(const std::string& prefix, const std::string& help_text, HandlerCb callback,
                   bool removable, bool mutates_server_state) override;
   bool removeHandler(const std::string& prefix) override;
@@ -114,8 +111,9 @@ public:
   Http::ConnectionManagerListenerStats& listenerStats() override { return listener_.stats_; }
   bool proxy100Continue() const override { return false; }
   const Http::Http1Settings& http1Settings() const override { return http1_settings_; }
-  Http::Code request(absl::string_view path_and_query, absl::string_view method,
-                     Http::HeaderMap& response_headers, std::string& body) override;
+  Http::Code request(absl::string_view path, const Http::Utility::QueryParams& params,
+                     absl::string_view method, Http::HeaderMap& response_headers,
+                     std::string& body) override;
 
 private:
   /**
@@ -133,15 +131,16 @@ private:
    * Implementation of RouteConfigProvider that returns a static null route config.
    */
   struct NullRouteConfigProvider : public Router::RouteConfigProvider {
-    NullRouteConfigProvider(TimeSource& time_source);
+    NullRouteConfigProvider();
 
     // Router::RouteConfigProvider
     Router::ConfigConstSharedPtr config() override { return config_; }
     absl::optional<ConfigInfo> configInfo() const override { return {}; }
-    SystemTime lastUpdated() const override { return time_source_.systemTime(); }
+    SystemTime lastUpdated() const override {
+      return ProdSystemTimeSource::instance_.currentTime();
+    }
 
     Router::ConfigConstSharedPtr config_;
-    TimeSource& time_source_;
   };
 
   friend class AdminStatsTest;

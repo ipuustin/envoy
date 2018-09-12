@@ -18,73 +18,54 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace ThriftProxy {
 
-class CompactProtocolTest : public testing::Test {
-public:
-  void resetMetadata() {
-    metadata_.setMethodName("-");
-    metadata_.setMessageType(MessageType::Oneway);
-    metadata_.setSequenceId(1);
-  }
-
-  void expectMetadata(const std::string& name, MessageType msg_type, int32_t seq_id) {
-    EXPECT_TRUE(metadata_.hasMethodName());
-    EXPECT_EQ(name, metadata_.methodName());
-
-    EXPECT_TRUE(metadata_.hasMessageType());
-    EXPECT_EQ(msg_type, metadata_.messageType());
-
-    EXPECT_TRUE(metadata_.hasSequenceId());
-    EXPECT_EQ(seq_id, metadata_.sequenceId());
-
-    EXPECT_FALSE(metadata_.hasFrameSize());
-    EXPECT_FALSE(metadata_.hasProtocol());
-    EXPECT_FALSE(metadata_.hasAppException());
-    EXPECT_EQ(metadata_.headers().size(), 0);
-  }
-
-  void expectDefaultMetadata() { expectMetadata("-", MessageType::Oneway, 1); }
-
-  MessageMetadata metadata_;
-};
-
-TEST_F(CompactProtocolTest, Name) {
+TEST(CompactProtocolTest, Name) {
   CompactProtocolImpl proto;
   EXPECT_EQ(proto.name(), "compact");
 }
 
-TEST_F(CompactProtocolTest, ReadMessageBegin) {
+TEST(CompactProtocolTest, ReadMessageBegin) {
   CompactProtocolImpl proto;
 
   // Insufficient data
   {
     Buffer::OwnedImpl buffer;
-    resetMetadata();
+    std::string name = "-";
+    MessageType msg_type = MessageType::Oneway;
+    int32_t seq_id = 1;
 
     addRepeated(buffer, 3, 'x');
 
-    EXPECT_FALSE(proto.readMessageBegin(buffer, metadata_));
-    expectDefaultMetadata();
+    EXPECT_FALSE(proto.readMessageBegin(buffer, name, msg_type, seq_id));
+    EXPECT_EQ(name, "-");
+    EXPECT_EQ(msg_type, MessageType::Oneway);
+    EXPECT_EQ(seq_id, 1);
     EXPECT_EQ(buffer.length(), 3);
   }
 
   // Wrong protocol version
   {
     Buffer::OwnedImpl buffer;
-    resetMetadata();
+    std::string name = "-";
+    MessageType msg_type = MessageType::Oneway;
+    int32_t seq_id = 1;
 
     addInt16(buffer, 0x0102);
     addRepeated(buffer, 2, 'x');
 
-    EXPECT_THROW_WITH_MESSAGE(proto.readMessageBegin(buffer, metadata_), EnvoyException,
-                              "invalid compact protocol version 0x0102 != 0x8201");
-    expectDefaultMetadata();
+    EXPECT_THROW_WITH_MESSAGE(proto.readMessageBegin(buffer, name, msg_type, seq_id),
+                              EnvoyException, "invalid compact protocol version 0x0102 != 0x8201");
+    EXPECT_EQ(name, "-");
+    EXPECT_EQ(msg_type, MessageType::Oneway);
+    EXPECT_EQ(seq_id, 1);
     EXPECT_EQ(buffer.length(), 4);
   }
 
   // Invalid message type
   {
     Buffer::OwnedImpl buffer;
-    resetMetadata();
+    std::string name = "-";
+    MessageType msg_type = MessageType::Oneway;
+    int32_t seq_id = 1;
 
     // Message type is encoded in the 3 highest order bits of the second byte.
     int8_t invalid_msg_type = static_cast<int8_t>(MessageType::LastMessageType) + 1;
@@ -92,137 +73,171 @@ TEST_F(CompactProtocolTest, ReadMessageBegin) {
     addRepeated(buffer, 2, 'x');
 
     EXPECT_THROW_WITH_MESSAGE(
-        proto.readMessageBegin(buffer, metadata_), EnvoyException,
+        proto.readMessageBegin(buffer, name, msg_type, seq_id), EnvoyException,
         fmt::format("invalid compact protocol message type {}", invalid_msg_type));
-    expectDefaultMetadata();
+    EXPECT_EQ(name, "-");
+    EXPECT_EQ(msg_type, MessageType::Oneway);
+    EXPECT_EQ(seq_id, 1);
     EXPECT_EQ(buffer.length(), 4);
   }
 
   // Insufficient data to read message id
   {
     Buffer::OwnedImpl buffer;
-    resetMetadata();
+    std::string name = "-";
+    MessageType msg_type = MessageType::Oneway;
+    int32_t seq_id = 1;
 
     addInt16(buffer, 0x8221);
     addRepeated(buffer, 2, 0x81);
 
-    EXPECT_FALSE(proto.readMessageBegin(buffer, metadata_));
-    expectDefaultMetadata();
+    EXPECT_FALSE(proto.readMessageBegin(buffer, name, msg_type, seq_id));
+    EXPECT_EQ(name, "-");
+    EXPECT_EQ(msg_type, MessageType::Oneway);
+    EXPECT_EQ(seq_id, 1);
     EXPECT_EQ(buffer.length(), 4);
   }
 
   // Invalid sequence id encoding
   {
     Buffer::OwnedImpl buffer;
-    resetMetadata();
+    std::string name = "-";
+    MessageType msg_type = MessageType::Oneway;
+    int32_t seq_id = 1;
 
     addInt16(buffer, 0x8221);
     addSeq(buffer, {0x81, 0x81, 0x81, 0x81, 0x81, 0}); // > 32 bit varint
     addInt8(buffer, 0);
 
-    EXPECT_THROW_WITH_MESSAGE(proto.readMessageBegin(buffer, metadata_), EnvoyException,
-                              "invalid compact protocol varint i32");
-    expectDefaultMetadata();
+    EXPECT_THROW_WITH_MESSAGE(proto.readMessageBegin(buffer, name, msg_type, seq_id),
+                              EnvoyException, "invalid compact protocol varint i32");
+    EXPECT_EQ(name, "-");
+    EXPECT_EQ(msg_type, MessageType::Oneway);
+    EXPECT_EQ(seq_id, 1);
     EXPECT_EQ(buffer.length(), 9);
   }
 
   // Insufficient data to read message name length
   {
     Buffer::OwnedImpl buffer;
-    resetMetadata();
+    std::string name = "-";
+    MessageType msg_type = MessageType::Oneway;
+    int32_t seq_id = 1;
 
     addInt16(buffer, 0x8221);
     addInt8(buffer, 32);
     addInt8(buffer, 0x81); // unterminated varint
 
-    EXPECT_FALSE(proto.readMessageBegin(buffer, metadata_));
-    expectDefaultMetadata();
+    EXPECT_FALSE(proto.readMessageBegin(buffer, name, msg_type, seq_id));
+    EXPECT_EQ(name, "-");
+    EXPECT_EQ(msg_type, MessageType::Oneway);
+    EXPECT_EQ(seq_id, 1);
     EXPECT_EQ(buffer.length(), 4);
   }
 
   // Insufficient data to read message name
   {
     Buffer::OwnedImpl buffer;
-    resetMetadata();
+    std::string name = "-";
+    MessageType msg_type = MessageType::Oneway;
+    int32_t seq_id = 1;
 
     addInt16(buffer, 0x8221);
     addInt8(buffer, 32);
     addInt8(buffer, 10);
     addString(buffer, "partial");
 
-    EXPECT_FALSE(proto.readMessageBegin(buffer, metadata_));
-    expectDefaultMetadata();
+    EXPECT_FALSE(proto.readMessageBegin(buffer, name, msg_type, seq_id));
+    EXPECT_EQ(name, "-");
+    EXPECT_EQ(msg_type, MessageType::Oneway);
+    EXPECT_EQ(seq_id, 1);
     EXPECT_EQ(buffer.length(), 11);
   }
 
   // Empty name
   {
     Buffer::OwnedImpl buffer;
-    resetMetadata();
+    std::string name = "-";
+    MessageType msg_type = MessageType::Oneway;
+    int32_t seq_id = 1;
 
     addInt16(buffer, 0x8221);
     addInt8(buffer, 32);
     addInt8(buffer, 0);
 
-    EXPECT_TRUE(proto.readMessageBegin(buffer, metadata_));
-    expectMetadata("", MessageType::Call, 32);
+    EXPECT_TRUE(proto.readMessageBegin(buffer, name, msg_type, seq_id));
+    EXPECT_EQ(name, "");
+    EXPECT_EQ(msg_type, MessageType::Call);
+    EXPECT_EQ(seq_id, 32);
     EXPECT_EQ(buffer.length(), 0);
   }
 
   // Invalid name length encoding
   {
     Buffer::OwnedImpl buffer;
-    resetMetadata();
+    std::string name = "-";
+    MessageType msg_type = MessageType::Oneway;
+    int32_t seq_id = 1;
 
     addInt16(buffer, 0x8221);
     addInt8(buffer, 32);
     addSeq(buffer, {0x81, 0x81, 0x81, 0x81, 0x81, 0}); // > 32 bit varint
 
-    EXPECT_THROW_WITH_MESSAGE(proto.readMessageBegin(buffer, metadata_), EnvoyException,
-                              "invalid compact protocol varint i32");
-    expectDefaultMetadata();
+    EXPECT_THROW_WITH_MESSAGE(proto.readMessageBegin(buffer, name, msg_type, seq_id),
+                              EnvoyException, "invalid compact protocol varint i32");
+    EXPECT_EQ(name, "-");
+    EXPECT_EQ(msg_type, MessageType::Oneway);
+    EXPECT_EQ(seq_id, 1);
     EXPECT_EQ(buffer.length(), 9);
   }
 
   // Invalid name length
   {
     Buffer::OwnedImpl buffer;
-    resetMetadata();
+    std::string name = "-";
+    MessageType msg_type = MessageType::Oneway;
+    int32_t seq_id = 1;
 
     addInt16(buffer, 0x8221);
     addInt8(buffer, 32);
     addSeq(buffer, {0xFF, 0xFF, 0xFF, 0xFF, 0x1F}); // -1
 
-    EXPECT_THROW_WITH_MESSAGE(proto.readMessageBegin(buffer, metadata_), EnvoyException,
-                              "negative compact protocol message name length -1");
-    expectDefaultMetadata();
+    EXPECT_THROW_WITH_MESSAGE(proto.readMessageBegin(buffer, name, msg_type, seq_id),
+                              EnvoyException, "negative compact protocol message name length -1");
+    EXPECT_EQ(name, "-");
+    EXPECT_EQ(msg_type, MessageType::Oneway);
+    EXPECT_EQ(seq_id, 1);
     EXPECT_EQ(buffer.length(), 8);
   }
 
   // Named message
   {
     Buffer::OwnedImpl buffer;
-    resetMetadata();
+    std::string name = "-";
+    MessageType msg_type = MessageType::Oneway;
+    int32_t seq_id = 1;
 
     addInt16(buffer, 0x8221);
     addInt16(buffer, 0x8202); // 0x0102
     addInt8(buffer, 8);
     addString(buffer, "the_name");
 
-    EXPECT_TRUE(proto.readMessageBegin(buffer, metadata_));
-    expectMetadata("the_name", MessageType::Call, 0x102);
+    EXPECT_TRUE(proto.readMessageBegin(buffer, name, msg_type, seq_id));
+    EXPECT_EQ(name, "the_name");
+    EXPECT_EQ(msg_type, MessageType::Call);
+    EXPECT_EQ(seq_id, 0x0102);
     EXPECT_EQ(buffer.length(), 0);
   }
 }
 
-TEST_F(CompactProtocolTest, ReadMessageEnd) {
+TEST(CompactProtocolTest, ReadMessageEnd) {
   Buffer::OwnedImpl buffer;
   CompactProtocolImpl proto;
 
   EXPECT_TRUE(proto.readMessageEnd(buffer));
 }
 
-TEST_F(CompactProtocolTest, ReadStruct) {
+TEST(CompactProtocolTest, ReadStruct) {
   Buffer::OwnedImpl buffer;
   CompactProtocolImpl proto;
   std::string name = "-";
@@ -236,7 +251,7 @@ TEST_F(CompactProtocolTest, ReadStruct) {
                             "invalid check for compact protocol struct end")
 }
 
-TEST_F(CompactProtocolTest, ReadFieldBegin) {
+TEST(CompactProtocolTest, ReadFieldBegin) {
   CompactProtocolImpl proto;
 
   // Insufficient data
@@ -397,13 +412,13 @@ TEST_F(CompactProtocolTest, ReadFieldBegin) {
   }
 }
 
-TEST_F(CompactProtocolTest, ReadFieldEnd) {
+TEST(CompactProtocolTest, ReadFieldEnd) {
   Buffer::OwnedImpl buffer;
   CompactProtocolImpl proto;
   EXPECT_TRUE(proto.readFieldEnd(buffer));
 }
 
-TEST_F(CompactProtocolTest, ReadMapBegin) {
+TEST(CompactProtocolTest, ReadMapBegin) {
   CompactProtocolImpl proto;
 
   // Insufficient data
@@ -542,13 +557,13 @@ TEST_F(CompactProtocolTest, ReadMapBegin) {
   }
 }
 
-TEST_F(CompactProtocolTest, ReadMapEnd) {
+TEST(CompactProtocolTest, ReadMapEnd) {
   Buffer::OwnedImpl buffer;
   CompactProtocolImpl proto;
   EXPECT_TRUE(proto.readMapEnd(buffer));
 }
 
-TEST_F(CompactProtocolTest, ReadListBegin) {
+TEST(CompactProtocolTest, ReadListBegin) {
   CompactProtocolImpl proto;
 
   // Insufficient data
@@ -655,13 +670,13 @@ TEST_F(CompactProtocolTest, ReadListBegin) {
   }
 }
 
-TEST_F(CompactProtocolTest, ReadListEnd) {
+TEST(CompactProtocolTest, ReadListEnd) {
   Buffer::OwnedImpl buffer;
   CompactProtocolImpl proto;
   EXPECT_TRUE(proto.readListEnd(buffer));
 }
 
-TEST_F(CompactProtocolTest, ReadSetBegin) {
+TEST(CompactProtocolTest, ReadSetBegin) {
   CompactProtocolImpl proto;
 
   // Test only the happy path, since this method is just delegated to readListBegin()
@@ -677,13 +692,13 @@ TEST_F(CompactProtocolTest, ReadSetBegin) {
   EXPECT_EQ(buffer.length(), 0);
 }
 
-TEST_F(CompactProtocolTest, ReadSetEnd) {
+TEST(CompactProtocolTest, ReadSetEnd) {
   Buffer::OwnedImpl buffer;
   CompactProtocolImpl proto;
   EXPECT_TRUE(proto.readSetEnd(buffer));
 }
 
-TEST_F(CompactProtocolTest, ReadBool) {
+TEST(CompactProtocolTest, ReadBool) {
   CompactProtocolImpl proto;
 
   // Bool field values are encoded in the field type
@@ -747,7 +762,7 @@ TEST_F(CompactProtocolTest, ReadBool) {
   }
 }
 
-TEST_F(CompactProtocolTest, ReadIntegerTypes) {
+TEST(CompactProtocolTest, ReadIntegerTypes) {
   CompactProtocolImpl proto;
 
   // Byte
@@ -878,7 +893,7 @@ TEST_F(CompactProtocolTest, ReadIntegerTypes) {
   }
 }
 
-TEST_F(CompactProtocolTest, ReadDouble) {
+TEST(CompactProtocolTest, ReadDouble) {
   CompactProtocolImpl proto;
 
   // Insufficient data
@@ -908,7 +923,7 @@ TEST_F(CompactProtocolTest, ReadDouble) {
   }
 }
 
-TEST_F(CompactProtocolTest, ReadString) {
+TEST(CompactProtocolTest, ReadString) {
   CompactProtocolImpl proto;
 
   // Insufficient data
@@ -984,7 +999,7 @@ TEST_F(CompactProtocolTest, ReadString) {
   }
 }
 
-TEST_F(CompactProtocolTest, ReadBinary) {
+TEST(CompactProtocolTest, ReadBinary) {
   // Test only the happy path, since this method is just delegated to readString()
   CompactProtocolImpl proto;
   Buffer::OwnedImpl buffer;
@@ -1035,40 +1050,32 @@ TEST_P(CompactProtocolFieldTypeTest, ConvertsToFieldType) {
 INSTANTIATE_TEST_CASE_P(CompactFieldTypes, CompactProtocolFieldTypeTest,
                         Values(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12));
 
-TEST_F(CompactProtocolTest, WriteMessageBegin) {
+TEST(CompactProtocolTest, WriteMessageBegin) {
   CompactProtocolImpl proto;
 
   // Named call
   {
-    metadata_.setMethodName("message");
-    metadata_.setMessageType(MessageType::Call);
-    metadata_.setSequenceId(1);
-
     Buffer::OwnedImpl buffer;
-    proto.writeMessageBegin(buffer, metadata_);
+    proto.writeMessageBegin(buffer, "message", MessageType::Call, 1);
     EXPECT_EQ(std::string("\x82\x21\x1\x7message", 11), buffer.toString());
   }
 
   // Unnamed oneway
   {
-    metadata_.setMethodName("");
-    metadata_.setMessageType(MessageType::Oneway);
-    metadata_.setSequenceId(2);
-
     Buffer::OwnedImpl buffer;
-    proto.writeMessageBegin(buffer, metadata_);
+    proto.writeMessageBegin(buffer, "", MessageType::Oneway, 2);
     EXPECT_EQ(std::string("\x82\x81\x2\0", 4), buffer.toString());
   }
 }
 
-TEST_F(CompactProtocolTest, WriteMessageEnd) {
+TEST(CompactProtocolTest, WriteMessageEnd) {
   CompactProtocolImpl proto;
   Buffer::OwnedImpl buffer;
   proto.writeMessageEnd(buffer);
   EXPECT_EQ(0, buffer.length());
 }
 
-TEST_F(CompactProtocolTest, WriteStruct) {
+TEST(CompactProtocolTest, WriteStruct) {
   CompactProtocolImpl proto;
   Buffer::OwnedImpl buffer;
 
@@ -1081,7 +1088,7 @@ TEST_F(CompactProtocolTest, WriteStruct) {
                             "invalid write of compact protocol struct end")
 }
 
-TEST_F(CompactProtocolTest, WriteFieldBegin) {
+TEST(CompactProtocolTest, WriteFieldBegin) {
   // Stop field
   {
     CompactProtocolImpl proto;
@@ -1168,14 +1175,14 @@ TEST_F(CompactProtocolTest, WriteFieldBegin) {
   }
 }
 
-TEST_F(CompactProtocolTest, WriteFieldEnd) {
+TEST(CompactProtocolTest, WriteFieldEnd) {
   CompactProtocolImpl proto;
   Buffer::OwnedImpl buffer;
   proto.writeFieldEnd(buffer);
   EXPECT_EQ(0, buffer.length());
 }
 
-TEST_F(CompactProtocolTest, WriteBoolField) {
+TEST(CompactProtocolTest, WriteBoolField) {
   // Boolean struct fields are encoded with custom types to save a byte
 
   // Short form field
@@ -1220,7 +1227,7 @@ TEST_F(CompactProtocolTest, WriteBoolField) {
   }
 }
 
-TEST_F(CompactProtocolTest, WriteMapBegin) {
+TEST(CompactProtocolTest, WriteMapBegin) {
   CompactProtocolImpl proto;
 
   // Empty map
@@ -1246,14 +1253,14 @@ TEST_F(CompactProtocolTest, WriteMapBegin) {
   }
 }
 
-TEST_F(CompactProtocolTest, WriteMapEnd) {
+TEST(CompactProtocolTest, WriteMapEnd) {
   CompactProtocolImpl proto;
   Buffer::OwnedImpl buffer;
   proto.writeMapEnd(buffer);
   EXPECT_EQ(0, buffer.length());
 }
 
-TEST_F(CompactProtocolTest, WriteListBegin) {
+TEST(CompactProtocolTest, WriteListBegin) {
   CompactProtocolImpl proto;
 
   // Empty list
@@ -1285,14 +1292,14 @@ TEST_F(CompactProtocolTest, WriteListBegin) {
   }
 }
 
-TEST_F(CompactProtocolTest, WriteListEnd) {
+TEST(CompactProtocolTest, WriteListEnd) {
   CompactProtocolImpl proto;
   Buffer::OwnedImpl buffer;
   proto.writeListEnd(buffer);
   EXPECT_EQ(0, buffer.length());
 }
 
-TEST_F(CompactProtocolTest, WriteSetBegin) {
+TEST(CompactProtocolTest, WriteSetBegin) {
   CompactProtocolImpl proto;
 
   // Empty set only, as writeSetBegin delegates to writeListBegin.
@@ -1301,14 +1308,14 @@ TEST_F(CompactProtocolTest, WriteSetBegin) {
   EXPECT_EQ("\x5", buffer.toString());
 }
 
-TEST_F(CompactProtocolTest, WriteSetEnd) {
+TEST(CompactProtocolTest, WriteSetEnd) {
   CompactProtocolImpl proto;
   Buffer::OwnedImpl buffer;
   proto.writeSetEnd(buffer);
   EXPECT_EQ(0, buffer.length());
 }
 
-TEST_F(CompactProtocolTest, WriteBool) {
+TEST(CompactProtocolTest, WriteBool) {
   CompactProtocolImpl proto;
 
   // Non-field bools (see WriteBoolField test)
@@ -1325,7 +1332,7 @@ TEST_F(CompactProtocolTest, WriteBool) {
   }
 }
 
-TEST_F(CompactProtocolTest, WriteByte) {
+TEST(CompactProtocolTest, WriteByte) {
   CompactProtocolImpl proto;
 
   {
@@ -1341,7 +1348,7 @@ TEST_F(CompactProtocolTest, WriteByte) {
   }
 }
 
-TEST_F(CompactProtocolTest, WriteInt16) {
+TEST(CompactProtocolTest, WriteInt16) {
   CompactProtocolImpl proto;
 
   // zigzag(1) = 2
@@ -1380,7 +1387,7 @@ TEST_F(CompactProtocolTest, WriteInt16) {
   }
 }
 
-TEST_F(CompactProtocolTest, WriteInt32) {
+TEST(CompactProtocolTest, WriteInt32) {
   CompactProtocolImpl proto;
 
   // zigzag(1) = 2
@@ -1419,7 +1426,7 @@ TEST_F(CompactProtocolTest, WriteInt32) {
   }
 }
 
-TEST_F(CompactProtocolTest, WriteInt64) {
+TEST(CompactProtocolTest, WriteInt64) {
   CompactProtocolImpl proto;
 
   // zigzag(1) = 2
@@ -1458,14 +1465,14 @@ TEST_F(CompactProtocolTest, WriteInt64) {
   }
 }
 
-TEST_F(CompactProtocolTest, WriteDouble) {
+TEST(CompactProtocolTest, WriteDouble) {
   CompactProtocolImpl proto;
   Buffer::OwnedImpl buffer;
   proto.writeDouble(buffer, 3.0);
   EXPECT_EQ(std::string("\x40\x8\0\0\0\0\0\0", 8), buffer.toString());
 }
 
-TEST_F(CompactProtocolTest, WriteString) {
+TEST(CompactProtocolTest, WriteString) {
   CompactProtocolImpl proto;
 
   {
@@ -1491,7 +1498,7 @@ TEST_F(CompactProtocolTest, WriteString) {
   }
 }
 
-TEST_F(CompactProtocolTest, WriteBinary) {
+TEST(CompactProtocolTest, WriteBinary) {
   CompactProtocolImpl proto;
 
   // writeBinary is an alias for writeString

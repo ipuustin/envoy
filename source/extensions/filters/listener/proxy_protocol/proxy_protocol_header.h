@@ -1,5 +1,4 @@
 #pragma once
-
 #include "common/common/assert.h"
 
 namespace Envoy {

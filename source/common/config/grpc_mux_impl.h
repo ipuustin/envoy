@@ -24,9 +24,10 @@ class GrpcMuxImpl : public GrpcMux,
                     Grpc::TypedAsyncStreamCallbacks<envoy::api::v2::DiscoveryResponse>,
                     Logger::Loggable<Logger::Id::upstream> {
 public:
-  GrpcMuxImpl(const LocalInfo::LocalInfo& local_info, Grpc::AsyncClientPtr async_client,
+  GrpcMuxImpl(const envoy::api::v2::core::Node& node, Grpc::AsyncClientPtr async_client,
               Event::Dispatcher& dispatcher, const Protobuf::MethodDescriptor& service_method,
-              Runtime::RandomGenerator& random);
+              Runtime::RandomGenerator& random,
+              MonotonicTimeSource& time_source = ProdMonotonicTimeSource::instance_);
   ~GrpcMuxImpl();
 
   void start() override;
@@ -94,7 +95,7 @@ private:
     TokenBucketPtr limit_log_;
   };
 
-  const LocalInfo::LocalInfo& local_info_;
+  envoy::api::v2::core::Node node_;
   Grpc::AsyncClientPtr async_client_;
   Grpc::AsyncStream* stream_{};
   const Protobuf::MethodDescriptor& service_method_;
@@ -103,7 +104,7 @@ private:
   std::list<std::string> subscriptions_;
   Event::TimerPtr retry_timer_;
   Runtime::RandomGenerator& random_;
-  TimeSource& time_source_;
+  MonotonicTimeSource& time_source_;
   BackOffStrategyPtr backoff_strategy_;
 };
 

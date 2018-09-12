@@ -5,6 +5,7 @@
 #include "envoy/event/dispatcher.h"
 
 #include "common/http/header_map_impl.h"
+#include "common/stats/stats_impl.h"
 
 #include "extensions/filters/http/buffer/buffer_filter.h"
 #include "extensions/filters/http/well_known_names.h"
@@ -16,12 +17,12 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::DoAll;
 using testing::InSequence;
 using testing::NiceMock;
 using testing::Return;
 using testing::SaveArg;
+using testing::_;
 
 namespace Envoy {
 namespace Extensions {

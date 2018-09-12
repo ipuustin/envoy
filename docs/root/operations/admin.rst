@@ -32,8 +32,8 @@ modify different aspects of the server:
   In the future additional security options will be added to the administration interface. This
   work is tracked in `this <https://github.com/envoyproxy/envoy/issues/2763>`_ issue.
 
-  All mutations must be sent as HTTP POST operations. When a mutation is requested via GET,
-  the request has no effect, and an HTTP 400 (Invalid Request) response is returned.
+  All mutations should be sent as HTTP POST operations. For a limited time, they will continue
+  to work with HTTP GET, with a warning logged.
 
 .. http:get:: /
 
@@ -352,7 +352,6 @@ The fields are:
     In Envoy, service unavailable response will cause **outlier detection** - removing a node off the 
     load balancer pool, but requests are not rejected as a result. Therefore, this counter is always 
     set to '0'.
-  * Latency information represents data since last flush. 
-    Mean latency is currently not available.
+  * Latency information is currently unavailable.
   
   

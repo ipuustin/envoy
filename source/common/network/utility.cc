@@ -23,6 +23,7 @@
 
 #include "envoy/common/exception.h"
 #include "envoy/network/connection.h"
+#include "envoy/stats/stats.h"
 
 #include "common/api/os_sys_calls_impl.h"
 #include "common/common/assert.h"
@@ -300,18 +301,16 @@ Address::InstanceConstSharedPtr Utility::getOriginalDst(int fd) {
   int socket_domain;
   socklen_t domain_len = sizeof(socket_domain);
   auto& os_syscalls = Api::OsSysCallsSingleton::get();
-  const Api::SysCallIntResult result =
-      os_syscalls.getsockopt(fd, SOL_SOCKET, SO_DOMAIN, &socket_domain, &domain_len);
-  int status = result.rc_;
+  int status = os_syscalls.getsockopt(fd, SOL_SOCKET, SO_DOMAIN, &socket_domain, &domain_len);
 
   if (status != 0) {
     return nullptr;
   }
 
   if (socket_domain == AF_INET) {
-    status = os_syscalls.getsockopt(fd, SOL_IP, SO_ORIGINAL_DST, &orig_addr, &addr_len).rc_;
+    status = os_syscalls.getsockopt(fd, SOL_IP, SO_ORIGINAL_DST, &orig_addr, &addr_len);
   } else if (socket_domain == AF_INET6) {
-    status = os_syscalls.getsockopt(fd, SOL_IPV6, IP6T_SO_ORIGINAL_DST, &orig_addr, &addr_len).rc_;
+    status = os_syscalls.getsockopt(fd, SOL_IPV6, IP6T_SO_ORIGINAL_DST, &orig_addr, &addr_len);
   } else {
     return nullptr;
   }

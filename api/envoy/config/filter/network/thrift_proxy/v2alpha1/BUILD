@@ -8,7 +8,4 @@ api_proto_library_internal(
         "route.proto",
         "thrift_proxy.proto",
     ],
-    deps = [
-        "//envoy/api/v2/route",
-    ],
 )

@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "envoy/ratelimit/ratelimit.h"
-#include "envoy/stats/sink.h"
 #include "envoy/tracing/http_tracer.h"
 #include "envoy/upstream/cluster_manager.h"
 

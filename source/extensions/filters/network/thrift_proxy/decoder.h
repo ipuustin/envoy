@@ -63,10 +63,8 @@ private:
  */
 class DecoderStateMachine {
 public:
-  DecoderStateMachine(Protocol& proto, MessageMetadataSharedPtr& metadata,
-                      DecoderEventHandler& handler)
-      : proto_(proto), metadata_(metadata), handler_(handler), state_(ProtocolState::MessageBegin) {
-  }
+  DecoderStateMachine(Protocol& proto, ThriftFilters::DecoderFilter& filter)
+      : proto_(proto), filter_(filter), state_(ProtocolState::MessageBegin) {}
 
   /**
    * Consumes as much data from the configured Buffer as possible and executes the decoding state
@@ -121,11 +119,11 @@ private:
 
   struct DecoderStatus {
     DecoderStatus(ProtocolState next_state) : next_state_(next_state), filter_status_{} {};
-    DecoderStatus(ProtocolState next_state, FilterStatus filter_status)
+    DecoderStatus(ProtocolState next_state, ThriftFilters::FilterStatus filter_status)
         : next_state_(next_state), filter_status_(filter_status){};
 
     ProtocolState next_state_;
-    absl::optional<FilterStatus> filter_status_;
+    absl::optional<ThriftFilters::FilterStatus> filter_status_;
   };
 
   // These functions map directly to the matching ProtocolState values. Each returns the next state
@@ -164,8 +162,7 @@ private:
   ProtocolState popReturnState();
 
   Protocol& proto_;
-  MessageMetadataSharedPtr metadata_;
-  DecoderEventHandler& handler_;
+  ThriftFilters::DecoderFilter& filter_;
   ProtocolState state_;
   std::vector<Frame> stack_;
 };
@@ -177,9 +174,9 @@ public:
   virtual ~DecoderCallbacks() {}
 
   /**
-   * @return DecoderEventHandler& a new DecoderEventHandler for a message.
+   * @return DecoderFilter& a new DecoderFilter for a message.
    */
-  virtual DecoderEventHandler& newDecoderEventHandler() PURE;
+  virtual ThriftFilters::DecoderFilter& newDecoderFilter() PURE;
 };
 
 /**
@@ -195,20 +192,20 @@ public:
    *
    * @param data a Buffer containing Thrift protocol data
    * @param buffer_underflow bool set to true if more data is required to continue decoding
-   * @return FilterStatus::StopIteration when waiting for filter continuation,
+   * @return ThriftFilters::FilterStatus::StopIteration when waiting for filter continuation,
    *             Continue otherwise.
    * @throw EnvoyException on Thrift protocol errors
    */
-  FilterStatus onData(Buffer::Instance& data, bool& buffer_underflow);
+  ThriftFilters::FilterStatus onData(Buffer::Instance& data, bool& buffer_underflow);
 
   TransportType transportType() { return transport_->type(); }
   ProtocolType protocolType() { return protocol_->type(); }
 
 private:
   struct ActiveRequest {
-    ActiveRequest(DecoderEventHandler& handler) : handler_(handler) {}
+    ActiveRequest(ThriftFilters::DecoderFilter& filter) : filter_(filter) {}
 
-    DecoderEventHandler& handler_;
+    ThriftFilters::DecoderFilter& filter_;
   };
   typedef std::unique_ptr<ActiveRequest> ActiveRequestPtr;
 
@@ -218,7 +215,6 @@ private:
   ProtocolPtr protocol_;
   DecoderCallbacks& callbacks_;
   ActiveRequestPtr request_;
-  MessageMetadataSharedPtr metadata_;
   DecoderStateMachinePtr state_machine_;
   bool frame_started_{false};
   bool frame_ended_{false};

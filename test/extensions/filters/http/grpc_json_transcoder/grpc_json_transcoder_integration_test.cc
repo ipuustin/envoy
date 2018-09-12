@@ -71,10 +71,10 @@ protected:
       response = codec_client_->makeHeaderOnlyRequest(request_headers);
     }
 
-    ASSERT_TRUE(fake_upstreams_[0]->waitForHttpConnection(*dispatcher_, fake_upstream_connection_));
-    ASSERT_TRUE(fake_upstream_connection_->waitForNewStream(*dispatcher_, upstream_request_));
+    fake_upstream_connection_ = fake_upstreams_[0]->waitForHttpConnection(*dispatcher_);
+    upstream_request_ = fake_upstream_connection_->waitForNewStream(*dispatcher_);
     if (!grpc_request_messages.empty()) {
-      ASSERT_TRUE(upstream_request_->waitForEndStream(*dispatcher_));
+      upstream_request_->waitForEndStream(*dispatcher_);
 
       Grpc::Decoder grpc_decoder;
       std::vector<Grpc::Frame> frames;
@@ -114,7 +114,7 @@ protected:
       }
       EXPECT_TRUE(upstream_request_->complete());
     } else {
-      ASSERT_TRUE(upstream_request_->waitForReset());
+      upstream_request_->waitForReset();
     }
 
     response->waitForEndStream();
@@ -136,8 +136,8 @@ protected:
     }
 
     codec_client_->close();
-    ASSERT_TRUE(fake_upstream_connection_->close());
-    ASSERT_TRUE(fake_upstream_connection_->waitForDisconnect());
+    fake_upstream_connection_->close();
+    fake_upstream_connection_->waitForDisconnect();
   }
 };
 
@@ -164,8 +164,7 @@ TEST_P(GrpcJsonTranscoderIntegrationTest, UnaryGet) {
   testTranscoding<Empty, bookstore::ListShelvesResponse>(
       Http::TestHeaderMapImpl{{":method", "GET"}, {":path", "/shelves"}, {":authority", "host"}},
       "", {""}, {R"(shelves { id: 20 theme: "Children" }
-          shelves { id: 1 theme: "Foo" } )"},
-      Status(),
+          shelves { id: 1 theme: "Foo" } )"}, Status(),
       Http::TestHeaderMapImpl{{":status", "200"},
                               {"content-type", "application/json"},
                               {"content-length", "69"},

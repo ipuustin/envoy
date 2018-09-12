@@ -1,7 +1,5 @@
 #include "common/ssl/ssl_socket.h"
 
-#include "envoy/stats/scope.h"
-
 #include "common/common/assert.h"
 #include "common/common/empty_string.h"
 #include "common/common/hex.h"
@@ -17,26 +15,9 @@ using Envoy::Network::PostIoAction;
 namespace Envoy {
 namespace Ssl {
 
-namespace {
-// This SslSocket will be used when SSL secret is not fetched from SDS server.
-class NotReadySslSocket : public Network::TransportSocket {
-public:
-  // Network::TransportSocket
-  void setTransportSocketCallbacks(Network::TransportSocketCallbacks&) override {}
-  std::string protocol() const override { return EMPTY_STRING; }
-  bool canFlushClose() override { return true; }
-  void closeSocket(Network::ConnectionEvent) override {}
-  Network::IoResult doRead(Buffer::Instance&) override { return {PostIoAction::Close, 0, false}; }
-  Network::IoResult doWrite(Buffer::Instance&, bool) override {
-    return {PostIoAction::Close, 0, false};
-  }
-  void onConnected() override {}
-  const Ssl::Connection* ssl() const override { return nullptr; }
-};
-} // namespace
-
 SslSocket::SslSocket(ContextSharedPtr ctx, InitialState state)
     : ctx_(std::dynamic_pointer_cast<ContextImpl>(ctx)), ssl_(ctx_->newSsl()) {
+
   if (state == InitialState::Client) {
     SSL_set_connect_state(ssl_.get());
   } else {
@@ -237,7 +218,7 @@ bool SslSocket::peerCertificatePresented() const {
   return cert != nullptr;
 }
 
-std::string SslSocket::uriSanLocalCertificate() const {
+std::string SslSocket::uriSanLocalCertificate() {
   // The cert object is not owned.
   X509* cert = SSL_get_certificate(ssl_.get());
   if (!cert) {
@@ -246,7 +227,7 @@ std::string SslSocket::uriSanLocalCertificate() const {
   return getUriSanFromCertificate(cert);
 }
 
-std::vector<std::string> SslSocket::dnsSansLocalCertificate() const {
+std::vector<std::string> SslSocket::dnsSansLocalCertificate() {
   X509* cert = SSL_get_certificate(ssl_.get());
   if (!cert) {
     return {};
@@ -302,7 +283,7 @@ std::string SslSocket::uriSanPeerCertificate() const {
   return getUriSanFromCertificate(cert.get());
 }
 
-std::vector<std::string> SslSocket::dnsSansPeerCertificate() const {
+std::vector<std::string> SslSocket::dnsSansPeerCertificate() {
   bssl::UniquePtr<X509> cert(SSL_get_peer_certificate(ssl_.get()));
   if (!cert) {
     return {};
@@ -327,7 +308,7 @@ std::string SslSocket::getUriSanFromCertificate(X509* cert) const {
   return "";
 }
 
-std::vector<std::string> SslSocket::getDnsSansFromCertificate(X509* cert) const {
+std::vector<std::string> SslSocket::getDnsSansFromCertificate(X509* cert) {
   bssl::UniquePtr<GENERAL_NAMES> san_names(
       static_cast<GENERAL_NAMES*>(X509_get_ext_d2i(cert, NID_subject_alt_name, nullptr, nullptr)));
   if (san_names == nullptr) {
@@ -365,7 +346,7 @@ std::string SslSocket::serialNumberPeerCertificate() const {
   if (!cert) {
     return "";
   }
-  return Utility::getSerialNumberFromCertificate(*cert.get());
+  return Utility::getSerialNumberFromCertificate(cert.get());
 }
 
 std::string SslSocket::getSubjectFromCertificate(X509* cert) const {
@@ -402,89 +383,28 @@ std::string SslSocket::subjectLocalCertificate() const {
   return getSubjectFromCertificate(cert);
 }
 
-namespace {
-SslSocketFactoryStats generateStats(const std::string& prefix, Stats::Scope& store) {
-  return {
-      ALL_SSL_SOCKET_FACTORY_STATS(POOL_COUNTER_PREFIX(store, prefix + "_ssl_socket_factory."))};
-}
-} // namespace
-
-ClientSslSocketFactory::ClientSslSocketFactory(ClientContextConfigPtr config,
+ClientSslSocketFactory::ClientSslSocketFactory(const ClientContextConfig& config,
                                                Ssl::ContextManager& manager,
                                                Stats::Scope& stats_scope)
-    : manager_(manager), stats_scope_(stats_scope), stats_(generateStats("client", stats_scope)),
-      config_(std::move(config)),
-      ssl_ctx_(manager_.createSslClientContext(stats_scope_, *config_)) {
-  config_->setSecretUpdateCallback([this]() { onAddOrUpdateSecret(); });
-}
+    : ssl_ctx_(manager.createSslClientContext(stats_scope, config)) {}
 
 Network::TransportSocketPtr ClientSslSocketFactory::createTransportSocket() const {
-  // onAddOrUpdateSecret() could be invoked in the middle of checking the existence of ssl_ctx and
-  // creating SslSocket using ssl_ctx. Capture ssl_ctx_ into a local variable so that we check and
-  // use the same ssl_ctx to create SslSocket.
-  ClientContextSharedPtr ssl_ctx;
-  {
-    absl::ReaderMutexLock l(&ssl_ctx_mu_);
-    ssl_ctx = ssl_ctx_;
-  }
-  if (ssl_ctx) {
-    return std::make_unique<Ssl::SslSocket>(std::move(ssl_ctx), Ssl::InitialState::Client);
-  } else {
-    ENVOY_LOG(debug, "Create NotReadySslSocket");
-    stats_.upstream_context_secrets_not_ready_.inc();
-    return std::make_unique<NotReadySslSocket>();
-  }
+  return std::make_unique<Ssl::SslSocket>(ssl_ctx_, Ssl::InitialState::Client);
 }
 
 bool ClientSslSocketFactory::implementsSecureTransport() const { return true; }
 
-void ClientSslSocketFactory::onAddOrUpdateSecret() {
-  ENVOY_LOG(debug, "Secret is updated.");
-  {
-    absl::WriterMutexLock l(&ssl_ctx_mu_);
-    ssl_ctx_ = manager_.createSslClientContext(stats_scope_, *config_);
-  }
-  stats_.ssl_context_update_by_sds_.inc();
-}
-
-ServerSslSocketFactory::ServerSslSocketFactory(ServerContextConfigPtr config,
+ServerSslSocketFactory::ServerSslSocketFactory(const ServerContextConfig& config,
                                                Ssl::ContextManager& manager,
                                                Stats::Scope& stats_scope,
                                                const std::vector<std::string>& server_names)
-    : manager_(manager), stats_scope_(stats_scope), stats_(generateStats("server", stats_scope)),
-      config_(std::move(config)), server_names_(server_names),
-      ssl_ctx_(manager_.createSslServerContext(stats_scope_, *config_, server_names_)) {
-  config_->setSecretUpdateCallback([this]() { onAddOrUpdateSecret(); });
-}
+    : ssl_ctx_(manager.createSslServerContext(stats_scope, config, server_names)) {}
 
 Network::TransportSocketPtr ServerSslSocketFactory::createTransportSocket() const {
-  // onAddOrUpdateSecret() could be invoked in the middle of checking the existence of ssl_ctx and
-  // creating SslSocket using ssl_ctx. Capture ssl_ctx_ into a local variable so that we check and
-  // use the same ssl_ctx to create SslSocket.
-  ServerContextSharedPtr ssl_ctx;
-  {
-    absl::ReaderMutexLock l(&ssl_ctx_mu_);
-    ssl_ctx = ssl_ctx_;
-  }
-  if (ssl_ctx) {
-    return std::make_unique<Ssl::SslSocket>(std::move(ssl_ctx), Ssl::InitialState::Server);
-  } else {
-    ENVOY_LOG(debug, "Create NotReadySslSocket");
-    stats_.downstream_context_secrets_not_ready_.inc();
-    return std::make_unique<NotReadySslSocket>();
-  }
+  return std::make_unique<Ssl::SslSocket>(ssl_ctx_, Ssl::InitialState::Server);
 }
 
 bool ServerSslSocketFactory::implementsSecureTransport() const { return true; }
-
-void ServerSslSocketFactory::onAddOrUpdateSecret() {
-  ENVOY_LOG(debug, "Secret is updated.");
-  {
-    absl::WriterMutexLock l(&ssl_ctx_mu_);
-    ssl_ctx_ = manager_.createSslServerContext(stats_scope_, *config_, server_names_);
-  }
-  stats_.ssl_context_update_by_sds_.inc();
-}
 
 } // namespace Ssl
 } // namespace Envoy

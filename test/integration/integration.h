@@ -14,7 +14,6 @@
 #include "test/mocks/buffer/mocks.h"
 #include "test/test_common/environment.h"
 #include "test/test_common/printers.h"
-#include "test/test_common/test_time.h"
 
 #include "spdlog/spdlog.h"
 
@@ -123,6 +122,8 @@ public:
                       const std::string& config = ConfigHelper::HTTP_PROXY_CONFIG);
   virtual ~BaseIntegrationTest() {}
 
+  void SetUp();
+
   // Initialize the basic proto configuration, create fake upstreams, and start Envoy.
   virtual void initialize();
   // Set up the fake upstream connections. This is called by initialize() and
@@ -159,8 +160,6 @@ public:
                            const std::vector<std::string>& port_names);
 
   Api::ApiPtr api_;
-  DangerousDeprecatedTestTime test_time_;
-
   MockBufferFactory* mock_buffer_factory_; // Will point to the dispatcher's factory.
   Event::DispatcherPtr dispatcher_;
 
@@ -203,6 +202,8 @@ protected:
   bool enable_half_close_{false};
 
 private:
+  // The codec type for the client-to-Envoy connection
+  Http::CodecClient::Type downstream_protocol_{Http::CodecClient::Type::HTTP1};
   // The type for the Envoy-to-backend connection
   FakeHttpConnection::Type upstream_protocol_{FakeHttpConnection::Type::HTTP1};
   // True if initialized() has been called.

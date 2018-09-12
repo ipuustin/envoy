@@ -13,7 +13,6 @@
 #include "envoy/runtime/runtime.h"
 #include "envoy/server/admin.h"
 #include "envoy/singleton/manager.h"
-#include "envoy/stats/scope.h"
 #include "envoy/thread_local/thread_local.h"
 #include "envoy/tracing/http_tracer.h"
 #include "envoy/upstream/cluster_manager.h"
@@ -131,9 +130,9 @@ public:
   virtual const envoy::api::v2::core::Metadata& listenerMetadata() const PURE;
 
   /**
-   * @return TimeSource& a reference to the time source.
+   * @return SystemTimeSource& a reference to the top-level SystemTime source.
    */
-  virtual TimeSource& timeSource() PURE;
+  virtual SystemTimeSource& systemTimeSource() PURE;
 };
 
 class ListenerFactoryContext : public FactoryContext {
@@ -182,38 +181,10 @@ public:
 };
 
 /**
- * Implemented by filter factories that require more options to process the protocol used by the
- * upstream cluster.
- */
-class ProtocolOptionsFactory {
-public:
-  virtual ~ProtocolOptionsFactory() {}
-
-  /**
-   * Create a particular filter's protocol specific options implementation. If the factory
-   * implementation is unable to produce a factory with the provided parameters, it should throw an
-   * EnvoyException.
-   * @param config supplies the protobuf configuration for the filter
-   * @return Upstream::ProtocoOptionsConfigConstSharedPtr the protocol options
-   */
-  virtual Upstream::ProtocolOptionsConfigConstSharedPtr
-  createProtocolOptionsConfig(const Protobuf::Message& config) {
-    UNREFERENCED_PARAMETER(config);
-    return nullptr;
-  }
-
-  /**
-   * @return ProtobufTypes::MessagePtr a newly created empty protocol specific options message or
-   *         nullptr if protocol specific options are not available.
-   */
-  virtual ProtobufTypes::MessagePtr createEmptyProtocolOptionsProto() { return nullptr; }
-};
-
-/**
  * Implemented by each network filter and registered via Registry::registerFactory()
  * or the convenience class RegisterFactory.
  */
-class NamedNetworkFilterConfigFactory : public ProtocolOptionsFactory {
+class NamedNetworkFilterConfigFactory {
 public:
   virtual ~NamedNetworkFilterConfigFactory() {}
 
@@ -259,7 +230,7 @@ public:
  * Implemented by each HTTP filter and registered via Registry::registerFactory or the
  * convenience class RegisterFactory.
  */
-class NamedHttpFilterConfigFactory : public ProtocolOptionsFactory {
+class NamedHttpFilterConfigFactory {
 public:
   virtual ~NamedHttpFilterConfigFactory() {}
 

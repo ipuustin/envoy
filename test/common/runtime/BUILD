@@ -21,7 +21,6 @@ envoy_cc_test(
     data = glob(["test_data/**"]) + ["filesystem_setup.sh"],
     deps = [
         "//source/common/runtime:runtime_lib",
-        "//source/common/stats:isolated_store_lib",
         "//source/common/stats:stats_lib",
         "//test/mocks/api:api_mocks",
         "//test/mocks/event:event_mocks",

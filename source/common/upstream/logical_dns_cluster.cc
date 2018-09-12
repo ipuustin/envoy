@@ -5,8 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "envoy/stats/scope.h"
-
 #include "common/common/fmt.h"
 #include "common/config/utility.h"
 #include "common/network/address_impl.h"
@@ -17,18 +15,21 @@
 namespace Envoy {
 namespace Upstream {
 
-LogicalDnsCluster::LogicalDnsCluster(
-    const envoy::api::v2::Cluster& cluster, Runtime::Loader& runtime,
-    Network::DnsResolverSharedPtr dns_resolver, ThreadLocal::SlotAllocator& tls,
-    Server::Configuration::TransportSocketFactoryContext& factory_context,
-    Stats::ScopePtr&& stats_scope, bool added_via_api)
-    : ClusterImplBase(cluster, runtime, factory_context, std::move(stats_scope), added_via_api),
+LogicalDnsCluster::LogicalDnsCluster(const envoy::api::v2::Cluster& cluster,
+                                     Runtime::Loader& runtime, Stats::Store& stats,
+                                     Ssl::ContextManager& ssl_context_manager,
+                                     const LocalInfo::LocalInfo& local_info,
+                                     Network::DnsResolverSharedPtr dns_resolver,
+                                     ThreadLocal::SlotAllocator& tls, ClusterManager& cm,
+                                     Event::Dispatcher& dispatcher, bool added_via_api)
+    : ClusterImplBase(cluster, cm.bindConfig(), runtime, stats, ssl_context_manager,
+                      cm.clusterManagerFactory().secretManager(), added_via_api),
       dns_resolver_(dns_resolver),
       dns_refresh_rate_ms_(
           std::chrono::milliseconds(PROTOBUF_GET_MS_OR_DEFAULT(cluster, dns_refresh_rate, 5000))),
-      tls_(tls.allocateSlot()), resolve_timer_(factory_context.dispatcher().createTimer(
-                                    [this]() -> void { startResolve(); })),
-      local_info_(factory_context.localInfo()),
+      tls_(tls.allocateSlot()),
+      resolve_timer_(dispatcher.createTimer([this]() -> void { startResolve(); })),
+      local_info_(local_info),
       load_assignment_(cluster.has_load_assignment()
                            ? cluster.load_assignment()
                            : Config::Utility::translateClusterHosts(cluster.hosts())) {
@@ -82,8 +83,8 @@ void LogicalDnsCluster::startResolve() {
 
   active_dns_query_ = dns_resolver_->resolve(
       dns_address, dns_lookup_family_,
-      [this, dns_address](
-          const std::list<Network::Address::InstanceConstSharedPtr>&& address_list) -> void {
+      [this,
+       dns_address](std::list<Network::Address::InstanceConstSharedPtr>&& address_list) -> void {
         active_dns_query_ = nullptr;
         ENVOY_LOG(debug, "async DNS resolution complete for {}", dns_address);
         info_->stats().update_success_.inc();
@@ -94,6 +95,15 @@ void LogicalDnsCluster::startResolve() {
           Network::Address::InstanceConstSharedPtr new_address =
               Network::Utility::getAddressWithPort(*address_list.front(),
                                                    Network::Utility::portFromTcpUrl(dns_url_));
+          if (!current_resolved_address_ || !(*new_address == *current_resolved_address_)) {
+            current_resolved_address_ = new_address;
+            // Capture URL to avoid a race with another update.
+            tls_->runOnAllThreads([this, new_address]() -> void {
+              PerThreadCurrentHostData& data = tls_->getTyped<PerThreadCurrentHostData>();
+              data.current_resolved_address_ = new_address;
+            });
+          }
+
           if (!logical_host_) {
             // TODO(mattklein123): The logical host is only used in /clusters admin output. We used
             // to show the friendly DNS name in that output, but currently there is no way to
@@ -119,19 +129,6 @@ void LogicalDnsCluster::startResolve() {
             priority_state_manager.updateClusterPrioritySet(
                 priority, std::move(priority_state_manager.priorityState()[priority].first),
                 absl::nullopt, absl::nullopt, absl::nullopt);
-          }
-
-          if (!current_resolved_address_ || !(*new_address == *current_resolved_address_)) {
-            current_resolved_address_ = new_address;
-
-            // Make sure that we have an updated health check address.
-            logical_host_->setHealthCheckAddress(new_address);
-
-            // Capture URL to avoid a race with another update.
-            tls_->runOnAllThreads([this, new_address]() -> void {
-              PerThreadCurrentHostData& data = tls_->getTyped<PerThreadCurrentHostData>();
-              data.current_resolved_address_ = new_address;
-            });
           }
         }
 

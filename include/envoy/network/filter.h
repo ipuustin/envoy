@@ -8,11 +8,6 @@
 #include "envoy/upstream/host_description.h"
 
 namespace Envoy {
-
-namespace Event {
-class Dispatcher;
-}
-
 namespace Network {
 
 class Connection;

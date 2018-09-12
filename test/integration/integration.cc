@@ -28,11 +28,11 @@
 
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::AnyNumber;
 using testing::AtLeast;
 using testing::Invoke;
 using testing::NiceMock;
+using testing::_;
 
 namespace Envoy {
 
@@ -155,7 +155,7 @@ void IntegrationTcpClient::close() { connection_->close(Network::ConnectionClose
 
 void IntegrationTcpClient::waitForData(const std::string& data, bool exact_match) {
   auto found = payload_reader_->data().find(data);
-  if (found == 0 || (!exact_match && found != std::string::npos)) {
+  if ((exact_match && found != std::string::npos) || (!exact_match && found == 0)) {
     return;
   }
 
@@ -214,8 +214,7 @@ BaseIntegrationTest::BaseIntegrationTest(Network::Address::IpVersion version,
                                          const std::string& config)
     : api_(new Api::Impl(std::chrono::milliseconds(10000))),
       mock_buffer_factory_(new NiceMock<MockBufferFactory>),
-      dispatcher_(new Event::DispatcherImpl(test_time_.timeSource(),
-                                            Buffer::WatermarkFactoryPtr{mock_buffer_factory_})),
+      dispatcher_(new Event::DispatcherImpl(Buffer::WatermarkFactoryPtr{mock_buffer_factory_})),
       version_(version), config_helper_(version, config),
       default_log_level_(TestEnvironment::getOptions().logLevel()) {
   // This is a hack, but there are situations where we disconnect fake upstream connections and

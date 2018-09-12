@@ -7,7 +7,6 @@
 #include "extensions/filters/network/thrift_proxy/binary_protocol_impl.h"
 #include "extensions/filters/network/thrift_proxy/compact_protocol_impl.h"
 #include "extensions/filters/network/thrift_proxy/framed_transport_impl.h"
-#include "extensions/filters/network/thrift_proxy/protocol.h"
 #include "extensions/filters/network/thrift_proxy/unframed_transport_impl.h"
 
 namespace Envoy {
@@ -31,64 +30,32 @@ Network::FilterStatus ConnectionManager::onData(Buffer::Instance& data, bool end
 
 void ConnectionManager::dispatch() {
   if (stopped_) {
-    ENVOY_CONN_LOG(debug, "thrift filter stopped", read_callbacks_->connection());
+    ENVOY_LOG(error, "thrift filter stopped");
     return;
   }
 
   try {
     bool underflow = false;
     while (!underflow) {
-      FilterStatus status = decoder_->onData(request_buffer_, underflow);
-      if (status == FilterStatus::StopIteration) {
+      ThriftFilters::FilterStatus status = decoder_->onData(request_buffer_, underflow);
+      if (status == ThriftFilters::FilterStatus::StopIteration) {
         stopped_ = true;
         break;
       }
     }
-
-    return;
-  } catch (const AppException& ex) {
-    ENVOY_LOG(error, "thrift application exception: {}", ex.what());
-    if (rpcs_.empty()) {
-      MessageMetadata metadata;
-      sendLocalReply(metadata, ex);
-    } else {
-      sendLocalReply(*(*rpcs_.begin())->metadata_, ex);
-    }
   } catch (const EnvoyException& ex) {
-    ENVOY_CONN_LOG(error, "thrift error: {}", read_callbacks_->connection(), ex.what());
+    ENVOY_LOG(error, "thrift error: {}", ex.what());
+    stats_.request_decoding_error_.inc();
 
     // Use the current rpc to send an error downstream, if possible.
     rpcs_.front()->onError(ex.what());
+
+    resetAllRpcs();
+    read_callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite);
   }
-
-  stats_.request_decoding_error_.inc();
-  resetAllRpcs();
-  read_callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite);
-}
-
-void ConnectionManager::sendLocalReply(MessageMetadata& metadata, const DirectResponse& response) {
-  // Use the factory to get the concrete protocol from the decoder protocol (as opposed to
-  // potentially pre-detection auto protocol).
-  ProtocolType proto_type = decoder_->protocolType();
-  ProtocolPtr proto = NamedProtocolConfigFactory::getFactory(proto_type).createProtocol();
-  Buffer::OwnedImpl buffer;
-
-  response.encode(metadata, *proto, buffer);
-
-  // Same logic as protocol above.
-  TransportPtr transport =
-      NamedTransportConfigFactory::getFactory(decoder_->transportType()).createTransport();
-
-  Buffer::OwnedImpl response_buffer;
-
-  metadata.setProtocol(proto_type);
-  transport->encodeFrame(response_buffer, metadata, buffer);
-
-  read_callbacks_->connection().write(response_buffer, false);
 }
 
 void ConnectionManager::continueDecoding() {
-  ENVOY_CONN_LOG(debug, "thrift filter continued", read_callbacks_->connection());
   stopped_ = false;
   dispatch();
 }
@@ -105,9 +72,6 @@ void ConnectionManager::resetAllRpcs() {
 
 void ConnectionManager::initializeReadFilterCallbacks(Network::ReadFilterCallbacks& callbacks) {
   read_callbacks_ = &callbacks;
-
-  read_callbacks_->connection().addConnectionCallbacks(*this);
-  read_callbacks_->connection().enableHalfClose(true);
 }
 
 void ConnectionManager::onEvent(Network::ConnectionEvent event) {
@@ -122,8 +86,8 @@ void ConnectionManager::onEvent(Network::ConnectionEvent event) {
   }
 }
 
-DecoderEventHandler& ConnectionManager::newDecoderEventHandler() {
-  ENVOY_LOG(trace, "new decoder filter");
+ThriftFilters::DecoderFilter& ConnectionManager::newDecoderFilter() {
+  ENVOY_LOG(debug, "new decoder filter");
 
   ActiveRpcPtr new_rpc(new ActiveRpc(*this));
   new_rpc->createFilterChain();
@@ -141,30 +105,30 @@ bool ConnectionManager::ResponseDecoder::onData(Buffer::Instance& data) {
   return complete_;
 }
 
-FilterStatus ConnectionManager::ResponseDecoder::messageBegin(MessageMetadataSharedPtr metadata) {
-  metadata_ = metadata;
-  first_reply_field_ =
-      (metadata->hasMessageType() && metadata->messageType() == MessageType::Reply);
-  return ProtocolConverter::messageBegin(metadata);
+ThriftFilters::FilterStatus ConnectionManager::ResponseDecoder::messageBegin(absl::string_view name,
+                                                                             MessageType msg_type,
+                                                                             int32_t seq_id) {
+  reply_.emplace(std::string(name), msg_type, seq_id);
+  first_reply_field_ = (msg_type == MessageType::Reply);
+  return ProtocolConverter::messageBegin(name, msg_type, seq_id);
 }
 
-FilterStatus ConnectionManager::ResponseDecoder::fieldBegin(absl::string_view name,
-                                                            FieldType field_type,
-                                                            int16_t field_id) {
+ThriftFilters::FilterStatus ConnectionManager::ResponseDecoder::fieldBegin(absl::string_view name,
+                                                                           FieldType field_type,
+                                                                           int16_t field_id) {
   if (first_reply_field_) {
     // Reply messages contain a struct where field 0 is the call result and fields 1+ are
     // exceptions, if defined. At most one field may be set. Therefore, the very first field we
     // encounter in a reply is either field 0 (success) or not (IDL exception returned).
-    success_ = field_id == 0 && field_type != FieldType::Stop;
+    ASSERT(reply_.has_value());
+    reply_.value().success_ = field_id == 0 && field_type != FieldType::Stop;
     first_reply_field_ = false;
   }
 
   return ProtocolConverter::fieldBegin(name, field_type, field_id);
 }
 
-FilterStatus ConnectionManager::ResponseDecoder::transportEnd() {
-  ASSERT(metadata_ != nullptr);
-
+ThriftFilters::FilterStatus ConnectionManager::ResponseDecoder::transportEnd() {
   ConnectionManager& cm = parent_.parent_;
 
   Buffer::OwnedImpl buffer;
@@ -174,20 +138,18 @@ FilterStatus ConnectionManager::ResponseDecoder::transportEnd() {
   TransportPtr transport =
       NamedTransportConfigFactory::getFactory(parent_.parent_.decoder_->transportType())
           .createTransport();
-
-  metadata_->setProtocol(parent_.parent_.decoder_->protocolType());
-  metadata_->setSequenceId(parent_.metadata_->sequenceId());
-  transport->encodeFrame(buffer, *metadata_, parent_.response_buffer_);
+  transport->encodeFrame(buffer, parent_.response_buffer_);
   complete_ = true;
 
   cm.read_callbacks_->connection().write(buffer, false);
 
   cm.stats_.response_.inc();
 
-  switch (metadata_->messageType()) {
+  ASSERT(reply_.has_value());
+  switch (reply_.value().msg_type_) {
   case MessageType::Reply:
     cm.stats_.response_reply_.inc();
-    if (success_.value_or(false)) {
+    if (reply_.value().success_.value_or(false)) {
       cm.stats_.response_success_.inc();
     } else {
       cm.stats_.response_error_.inc();
@@ -204,16 +166,15 @@ FilterStatus ConnectionManager::ResponseDecoder::transportEnd() {
     break;
   }
 
-  return FilterStatus::Continue;
+  return ThriftFilters::FilterStatus::Continue;
 }
 
-FilterStatus ConnectionManager::ActiveRpc::transportEnd() {
-  ASSERT(metadata_ != nullptr);
-  ASSERT(metadata_->hasMessageType());
+ThriftFilters::FilterStatus ConnectionManager::ActiveRpc::transportEnd() {
+  ASSERT(call_.has_value());
 
   parent_.stats_.request_.inc();
 
-  switch (metadata_->messageType()) {
+  switch (call_.value().msg_type_) {
   case MessageType::Call:
     parent_.stats_.request_call_.inc();
     break;
@@ -233,12 +194,6 @@ FilterStatus ConnectionManager::ActiveRpc::transportEnd() {
   return decoder_filter_->transportEnd();
 }
 
-FilterStatus ConnectionManager::ActiveRpc::messageBegin(MessageMetadataSharedPtr metadata) {
-  metadata_ = metadata;
-
-  return event_handler_->messageBegin(metadata);
-}
-
 void ConnectionManager::ActiveRpc::createFilterChain() {
   parent_.config_.filterFactory().createFilterChain(*this);
 }
@@ -249,8 +204,10 @@ void ConnectionManager::ActiveRpc::onReset() {
 }
 
 void ConnectionManager::ActiveRpc::onError(const std::string& what) {
-  if (metadata_) {
-    sendLocalReply(AppException(AppExceptionType::ProtocolError, what));
+  if (call_.has_value()) {
+    const Message& msg = call_.value();
+    sendLocalReply(std::make_unique<AppException>(msg.method_name_, msg.seq_id_,
+                                                  AppExceptionType::ProtocolError, what));
     return;
   }
 
@@ -266,8 +223,9 @@ void ConnectionManager::ActiveRpc::continueDecoding() { parent_.continueDecoding
 
 Router::RouteConstSharedPtr ConnectionManager::ActiveRpc::route() {
   if (!cached_route_) {
-    if (metadata_ != nullptr) {
-      Router::RouteConstSharedPtr route = parent_.config_.routerConfig().route(*metadata_);
+    if (call_.has_value()) {
+      Router::RouteConstSharedPtr route =
+          parent_.config_.routerConfig().route(call_.value().method_name_);
       cached_route_ = std::move(route);
     } else {
       cached_route_ = nullptr;
@@ -277,8 +235,21 @@ Router::RouteConstSharedPtr ConnectionManager::ActiveRpc::route() {
   return cached_route_.value();
 }
 
-void ConnectionManager::ActiveRpc::sendLocalReply(const DirectResponse& response) {
-  parent_.sendLocalReply(*metadata_, response);
+void ConnectionManager::ActiveRpc::sendLocalReply(ThriftFilters::DirectResponsePtr&& response) {
+  // Use the factory to get the concrete protocol from the decoder protocol (as opposed to
+  // potentially pre-detection auto protocol).
+  ProtocolPtr proto =
+      NamedProtocolConfigFactory::getFactory(parent_.decoder_->protocolType()).createProtocol();
+  Buffer::OwnedImpl buffer;
+
+  response->encode(*proto, buffer);
+
+  // Same logic as protocol above.
+  TransportPtr transport =
+      NamedTransportConfigFactory::getFactory(parent_.decoder_->transportType()).createTransport();
+  transport->encodeFrame(response_buffer_, buffer);
+
+  parent_.read_callbacks_->connection().write(response_buffer_, false);
   parent_.doDeferredRpcDestroy(*this);
 }
 
@@ -298,16 +269,8 @@ bool ConnectionManager::ActiveRpc::upstreamData(Buffer::Instance& buffer) {
       parent_.doDeferredRpcDestroy(*this);
     }
     return complete;
-  } catch (const AppException& ex) {
-    ENVOY_LOG(error, "thrift response application error: {}", ex.what());
-    parent_.stats_.response_decoding_error_.inc();
-
-    sendLocalReply(ex);
-    decoder_filter_->resetUpstreamConnection();
-    return true;
   } catch (const EnvoyException& ex) {
-    ENVOY_CONN_LOG(error, "thrift response error: {}", parent_.read_callbacks_->connection(),
-                   ex.what());
+    ENVOY_LOG(error, "thrift response error: {}", ex.what());
     parent_.stats_.response_decoding_error_.inc();
 
     onError(ex.what());
@@ -318,6 +281,7 @@ bool ConnectionManager::ActiveRpc::upstreamData(Buffer::Instance& buffer) {
 
 void ConnectionManager::ActiveRpc::resetDownstreamConnection() {
   parent_.read_callbacks_->connection().close(Network::ConnectionCloseType::NoFlush);
+  parent_.doDeferredRpcDestroy(*this);
 }
 
 } // namespace ThriftProxy

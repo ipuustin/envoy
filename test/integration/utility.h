@@ -11,11 +11,9 @@
 #include "envoy/network/filter.h"
 
 #include "common/common/assert.h"
-#include "common/common/utility.h"
 #include "common/http/codec_client.h"
 
 #include "test/test_common/printers.h"
-#include "test/test_common/test_time.h"
 
 namespace Envoy {
 /**
@@ -61,8 +59,7 @@ public:
   RawConnectionDriver(uint32_t port, Buffer::Instance& initial_data, ReadCallback data_callback,
                       Network::Address::IpVersion version);
   ~RawConnectionDriver();
-  const Network::Connection& connection() { return *client_; }
-  void run(Event::Dispatcher::RunType run_type = Event::Dispatcher::RunType::Block);
+  void run();
   void close();
 
 private:
@@ -126,9 +123,6 @@ public:
                     const std::string& body, Http::CodecClient::Type type,
                     Network::Address::IpVersion ip_version, const std::string& host = "host",
                     const std::string& content_type = "");
-
-  // TODO(jmarantz): this should be injectable.
-  static DangerousDeprecatedTestTime evil_singleton_test_time_;
 };
 
 // A set of connection callbacks which tracks connection state.

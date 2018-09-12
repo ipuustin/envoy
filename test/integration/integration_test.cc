@@ -40,8 +40,6 @@ TEST_P(IntegrationTest, RouterDirectResponse) { testRouterDirectResponse(); }
 
 TEST_P(IntegrationTest, ComputedHealthCheck) { testComputedHealthCheck(); }
 
-TEST_P(IntegrationTest, AddEncodedTrailers) { testAddEncodedTrailers(); }
-
 TEST_P(IntegrationTest, DrainClose) { testDrainClose(); }
 
 TEST_P(IntegrationTest, ConnectionClose) {
@@ -161,7 +159,7 @@ TEST_P(IntegrationTest, HittingGrpcFilterLimitBufferingHeaders) {
   upstream_request_->encodeHeaders(Http::TestHeaderMapImpl{{":status", "200"}}, false);
   fake_upstreams_[0]->set_allow_unexpected_disconnects(true);
   upstream_request_->encodeData(1024 * 65, false);
-  ASSERT_TRUE(fake_upstream_connection_->waitForDisconnect());
+  fake_upstream_connection_->waitForDisconnect();
 
   response->waitForEndStream();
   EXPECT_TRUE(response->complete());
@@ -253,14 +251,10 @@ TEST_P(IntegrationTest, TestHeadWithExplicitTE) {
 
   auto tcp_client = makeTcpConnection(lookupPort("http"));
   tcp_client->write("HEAD / HTTP/1.1\r\nHost: host\r\n\r\n");
-  FakeRawConnectionPtr fake_upstream_connection;
-  ASSERT_TRUE(fake_upstreams_[0]->waitForRawConnection(fake_upstream_connection));
-  std::string data;
-  ASSERT_TRUE(fake_upstream_connection->waitForData(
-      FakeRawConnection::waitForInexactMatch("\r\n\r\n"), &data));
+  auto fake_upstream_connection = fake_upstreams_[0]->waitForRawConnection();
+  fake_upstream_connection->waitForData(FakeRawConnection::waitForInexactMatch("\r\n\r\n"));
 
-  ASSERT_TRUE(
-      fake_upstream_connection->write("HTTP/1.1 200 OK\r\nTransfer-encoding: chunked\r\n\r\n"));
+  fake_upstream_connection->write("HTTP/1.1 200 OK\r\nTransfer-encoding: chunked\r\n\r\n");
   tcp_client->waitForData("\r\n\r\n", false);
   std::string response = tcp_client->data();
 
@@ -269,8 +263,8 @@ TEST_P(IntegrationTest, TestHeadWithExplicitTE) {
   EXPECT_THAT(response, HasSubstr("transfer-encoding: chunked\r\n"));
   EXPECT_THAT(response, EndsWith("\r\n\r\n"));
 
-  ASSERT_TRUE(fake_upstream_connection->close());
-  ASSERT_TRUE(fake_upstream_connection->waitForDisconnect());
+  fake_upstream_connection->close();
+  fake_upstream_connection->waitForDisconnect();
   tcp_client->close();
 }
 
@@ -292,14 +286,12 @@ TEST_P(IntegrationTest, TestBind) {
                                                                  {":scheme", "http"},
                                                                  {":authority", "host"}},
                                          1024);
-  ASSERT_TRUE(fake_upstreams_[0]->waitForHttpConnection(*dispatcher_, fake_upstream_connection_));
-  ASSERT_NE(fake_upstream_connection_, nullptr);
+  fake_upstream_connection_ = fake_upstreams_[0]->waitForHttpConnection(*dispatcher_);
   std::string address =
       fake_upstream_connection_->connection().remoteAddress()->ip()->addressAsString();
   EXPECT_EQ(address, address_string);
-  ASSERT_TRUE(fake_upstream_connection_->waitForNewStream(*dispatcher_, upstream_request_));
-  ASSERT_NE(upstream_request_, nullptr);
-  ASSERT_TRUE(upstream_request_->waitForEndStream(*dispatcher_));
+  upstream_request_ = fake_upstream_connection_->waitForNewStream(*dispatcher_);
+  upstream_request_->waitForEndStream(*dispatcher_);
 
   cleanupUpstreamAndDownstream();
 }

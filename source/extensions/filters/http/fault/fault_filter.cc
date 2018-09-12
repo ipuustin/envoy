@@ -8,7 +8,7 @@
 #include "envoy/event/timer.h"
 #include "envoy/http/codes.h"
 #include "envoy/http/header_map.h"
-#include "envoy/stats/scope.h"
+#include "envoy/stats/stats.h"
 
 #include "common/common/assert.h"
 #include "common/common/empty_string.h"
@@ -34,14 +34,12 @@ const std::string FaultFilter::ABORT_HTTP_STATUS_KEY = "fault.http.abort.http_st
 FaultSettings::FaultSettings(const envoy::config::filter::http::fault::v2::HTTPFault& fault) {
 
   if (fault.has_abort()) {
-    PROTOBUF_SET_FRACTIONAL_PERCENT_OR_DEFAULT(abort_percentage_, fault.abort(), percentage,
-                                               percent);
+    abort_percent_ = fault.abort().percent();
     http_status_ = fault.abort().http_status();
   }
 
   if (fault.has_delay()) {
-    PROTOBUF_SET_FRACTIONAL_PERCENT_OR_DEFAULT(fixed_delay_percentage_, fault.delay(), percentage,
-                                               percent);
+    fixed_delay_percent_ = fault.delay().percent();
     const auto& delay = fault.delay();
     fixed_duration_ms_ = PROTOBUF_GET_MS_OR_DEFAULT(delay, fixed_delay, 0);
   }
@@ -59,9 +57,9 @@ FaultSettings::FaultSettings(const envoy::config::filter::http::fault::v2::HTTPF
 
 FaultFilterConfig::FaultFilterConfig(const envoy::config::filter::http::fault::v2::HTTPFault& fault,
                                      Runtime::Loader& runtime, const std::string& stats_prefix,
-                                     Stats::Scope& scope, Runtime::RandomGenerator& generator)
+                                     Stats::Scope& scope)
     : settings_(fault), runtime_(runtime), stats_(generateStats(stats_prefix, scope)),
-      stats_prefix_(stats_prefix), scope_(scope), generator_(generator) {}
+      stats_prefix_(stats_prefix), scope_(scope) {}
 
 FaultFilter::FaultFilter(FaultFilterConfigSharedPtr config) : config_(config) {}
 
@@ -131,32 +129,26 @@ Http::FilterHeadersStatus FaultFilter::decodeHeaders(Http::HeaderMap& headers, b
 }
 
 bool FaultFilter::isDelayEnabled() {
-  bool enabled = config_->runtime().snapshot().featureEnabled(
-      DELAY_PERCENT_KEY, fault_settings_->delayPercentage().numerator(),
-      config_->randomGenerator().random(),
-      ProtobufPercentHelper::fractionalPercentDenominatorToInt(fault_settings_->delayPercentage()));
+  bool enabled = config_->runtime().snapshot().featureEnabled(DELAY_PERCENT_KEY,
+                                                              fault_settings_->delayPercent());
+
   if (!downstream_cluster_delay_percent_key_.empty()) {
-    enabled |= config_->runtime().snapshot().featureEnabled(
-        downstream_cluster_delay_percent_key_, fault_settings_->delayPercentage().numerator(),
-        config_->randomGenerator().random(),
-        ProtobufPercentHelper::fractionalPercentDenominatorToInt(
-            fault_settings_->delayPercentage()));
+    enabled |= config_->runtime().snapshot().featureEnabled(downstream_cluster_delay_percent_key_,
+                                                            fault_settings_->delayPercent());
   }
+
   return enabled;
 }
 
 bool FaultFilter::isAbortEnabled() {
-  bool enabled = config_->runtime().snapshot().featureEnabled(
-      ABORT_PERCENT_KEY, fault_settings_->abortPercentage().numerator(),
-      config_->randomGenerator().random(),
-      ProtobufPercentHelper::fractionalPercentDenominatorToInt(fault_settings_->abortPercentage()));
+  bool enabled = config_->runtime().snapshot().featureEnabled(ABORT_PERCENT_KEY,
+                                                              fault_settings_->abortPercent());
+
   if (!downstream_cluster_abort_percent_key_.empty()) {
-    enabled |= config_->runtime().snapshot().featureEnabled(
-        downstream_cluster_abort_percent_key_, fault_settings_->abortPercentage().numerator(),
-        config_->randomGenerator().random(),
-        ProtobufPercentHelper::fractionalPercentDenominatorToInt(
-            fault_settings_->abortPercentage()));
+    enabled |= config_->runtime().snapshot().featureEnabled(downstream_cluster_abort_percent_key_,
+                                                            fault_settings_->abortPercent());
   }
+
   return enabled;
 }
 

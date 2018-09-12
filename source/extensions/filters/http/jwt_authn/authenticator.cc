@@ -119,9 +119,7 @@ void AuthenticatorImpl::verify(Http::HeaderMap& headers, Authenticator::Callback
   const auto unix_timestamp = std::chrono::duration_cast<std::chrono::seconds>(
                                   std::chrono::system_clock::now().time_since_epoch())
                                   .count();
-  // NOTE: Service account tokens generally don't have an expiration time (due to being long lived)
-  // and defaulted to 0 by google::jwt_verify library but are still valid.
-  if (jwt_.exp_ > 0 && jwt_.exp_ < unix_timestamp) {
+  if (jwt_.exp_ < unix_timestamp) {
     doneWithStatus(Status::JwtExpired);
     return;
   }

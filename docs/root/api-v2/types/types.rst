@@ -11,4 +11,3 @@ Types
   ../type/matcher/metadata.proto
   ../type/matcher/number.proto
   ../type/matcher/string.proto
-  ../type/matcher/value.proto

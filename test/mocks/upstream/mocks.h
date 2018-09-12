@@ -12,8 +12,6 @@
 #include "envoy/upstream/upstream.h"
 
 #include "common/common/callback_impl.h"
-#include "common/upstream/health_discovery_service.h"
-#include "common/upstream/load_balancer_impl.h"
 #include "common/upstream/upstream_impl.h"
 
 #include "test/mocks/config/mocks.h"
@@ -35,8 +33,7 @@ namespace Upstream {
 
 class MockHostSet : public HostSet {
 public:
-  MockHostSet(uint32_t priority = 0,
-              uint32_t overprovisioning_factor = kDefaultOverProvisioningFactor);
+  MockHostSet(uint32_t priority = 0);
 
   void runCallbacks(const HostVector added, const HostVector removed) {
     member_update_cb_helper_.runCallbacks(priority(), added, removed);
@@ -53,18 +50,13 @@ public:
   MOCK_CONST_METHOD0(healthyHostsPerLocality, const HostsPerLocality&());
   MOCK_CONST_METHOD0(localityWeights, LocalityWeightsConstSharedPtr());
   MOCK_METHOD0(chooseLocality, absl::optional<uint32_t>());
-  MOCK_METHOD8(updateHosts, void(std::shared_ptr<const HostVector> hosts,
+  MOCK_METHOD7(updateHosts, void(std::shared_ptr<const HostVector> hosts,
                                  std::shared_ptr<const HostVector> healthy_hosts,
                                  HostsPerLocalityConstSharedPtr hosts_per_locality,
                                  HostsPerLocalityConstSharedPtr healthy_hosts_per_locality,
                                  LocalityWeightsConstSharedPtr locality_weights,
-                                 const HostVector& hosts_added, const HostVector& hosts_removed,
-                                 absl::optional<uint32_t> overprovisioning_factor));
+                                 const HostVector& hosts_added, const HostVector& hosts_removed));
   MOCK_CONST_METHOD0(priority, uint32_t());
-  uint32_t overprovisioning_factor() const override { return overprovisioning_factor_; }
-  void set_overprovisioning_factor(const uint32_t overprovisioning_factor) {
-    overprovisioning_factor_ = overprovisioning_factor;
-  }
 
   HostVector hosts_;
   HostVector healthy_hosts_;
@@ -73,7 +65,6 @@ public:
   LocalityWeightsConstSharedPtr locality_weights_{{}};
   Common::CallbackManager<uint32_t, const HostVector&, const HostVector&> member_update_cb_helper_;
   uint32_t priority_{};
-  uint32_t overprovisioning_factor_{};
 };
 
 class MockPrioritySet : public PrioritySet {
@@ -118,17 +109,6 @@ public:
   std::function<void()> initialize_callback_;
   Network::Address::InstanceConstSharedPtr source_address_;
   NiceMock<MockPrioritySet> priority_set_;
-};
-
-class MockLoadBalancerContext : public LoadBalancerContext {
-public:
-  MOCK_METHOD0(computeHashKey, absl::optional<uint64_t>());
-  MOCK_METHOD0(metadataMatchCriteria, Router::MetadataMatchCriteria*());
-  MOCK_CONST_METHOD0(downstreamConnection, const Network::Connection*());
-  MOCK_CONST_METHOD0(downstreamHeaders, const Http::HeaderMap*());
-  MOCK_METHOD2(determinePriorityLoad, const PriorityLoad&(const PrioritySet&, const PriorityLoad&));
-  MOCK_METHOD1(shouldSelectAnotherHost, bool(const Host&));
-  MOCK_CONST_METHOD0(hostSelectionRetryCount, uint32_t());
 };
 
 class MockLoadBalancer : public LoadBalancer {
@@ -192,7 +172,7 @@ public:
                          ClusterManager& cm));
 
 private:
-  NiceMock<Secret::MockSecretManager> secret_manager_;
+  Secret::MockSecretManager secret_manager_;
 };
 
 class MockClusterManager : public ClusterManager {
@@ -207,7 +187,6 @@ public:
   }
 
   ClusterManagerFactory& clusterManagerFactory() override { return cluster_manager_factory_; }
-  TimeSource& timeSource() override { return time_source_; }
 
   // Upstream::ClusterManager
   MOCK_METHOD2(addOrUpdateCluster,
@@ -235,9 +214,6 @@ public:
   MOCK_CONST_METHOD0(localClusterName, const std::string&());
   MOCK_METHOD1(addThreadLocalClusterUpdateCallbacks,
                std::unique_ptr<ClusterUpdateCallbacksHandle>(ClusterUpdateCallbacks& callbacks));
-
-  // TODO(jmarantz): Switch these to using mock-time.
-  RealTimeSource time_source_;
 
   NiceMock<Http::ConnectionPool::MockInstance> conn_pool_;
   NiceMock<Http::MockAsyncClient> async_client_;
@@ -295,17 +271,6 @@ public:
 
   MOCK_METHOD1(onClusterAddOrUpdate, void(ThreadLocalCluster& cluster));
   MOCK_METHOD1(onClusterRemoval, void(const std::string& cluster_name));
-};
-
-class MockClusterInfoFactory : public ClusterInfoFactory, Logger::Loggable<Logger::Id::upstream> {
-public:
-  MOCK_METHOD10(createClusterInfo,
-                ClusterInfoConstSharedPtr(
-                    Runtime::Loader& runtime, const envoy::api::v2::Cluster& cluster,
-                    const envoy::api::v2::core::BindConfig& bind_config, Stats::Store& stats,
-                    Ssl::ContextManager& ssl_context_manager, bool added_via_api,
-                    ClusterManager& cm, const LocalInfo::LocalInfo& local_info,
-                    Event::Dispatcher& dispatcher, Runtime::RandomGenerator& random));
 };
 
 } // namespace Upstream

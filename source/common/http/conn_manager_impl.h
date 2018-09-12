@@ -19,7 +19,6 @@
 #include "envoy/router/rds.h"
 #include "envoy/runtime/runtime.h"
 #include "envoy/ssl/connection.h"
-#include "envoy/stats/scope.h"
 #include "envoy/stats/stats_macros.h"
 #include "envoy/tracing/http_tracer.h"
 #include "envoy/upstream/upstream.h"
@@ -163,15 +162,13 @@ private:
 
     // Http::StreamDecoderFilterCallbacks
     void addDecodedData(Buffer::Instance& data, bool streaming) override;
-    HeaderMap& addDecodedTrailers() override;
     void continueDecoding() override;
     const Buffer::Instance* decodingBuffer() override {
       return parent_.buffered_request_data_.get();
     }
     void sendLocalReply(Code code, const std::string& body,
                         std::function<void(HeaderMap& headers)> modify_headers) override {
-      parent_.sendLocalReply(is_grpc_request_, code, body, modify_headers,
-                             parent_.is_head_request_);
+      parent_.sendLocalReply(is_grpc_request_, code, body, modify_headers);
     }
     void encode100ContinueHeaders(HeaderMapPtr&& headers) override;
     void encodeHeaders(HeaderMapPtr&& headers, bool end_stream) override;
@@ -232,7 +229,6 @@ private:
 
     // Http::StreamEncoderFilterCallbacks
     void addEncodedData(Buffer::Instance& data, bool streaming) override;
-    HeaderMap& addEncodedTrailers() override;
     void onEncoderFilterAboveWriteBufferHighWatermark() override;
     void onEncoderFilterBelowWriteBufferLowWatermark() override;
     void setEncoderBufferLimit(uint32_t limit) override { parent_.setBufferLimit(limit); }
@@ -271,16 +267,13 @@ private:
     commonEncodePrefix(ActiveStreamEncoderFilter* filter, bool end_stream);
     const Network::Connection* connection();
     void addDecodedData(ActiveStreamDecoderFilter& filter, Buffer::Instance& data, bool streaming);
-    HeaderMap& addDecodedTrailers();
     void decodeHeaders(ActiveStreamDecoderFilter* filter, HeaderMap& headers, bool end_stream);
     void decodeData(ActiveStreamDecoderFilter* filter, Buffer::Instance& data, bool end_stream);
     void decodeTrailers(ActiveStreamDecoderFilter* filter, HeaderMap& trailers);
     void maybeEndDecode(bool end_stream);
     void addEncodedData(ActiveStreamEncoderFilter& filter, Buffer::Instance& data, bool streaming);
-    HeaderMap& addEncodedTrailers();
     void sendLocalReply(bool is_grpc_request, Code code, const std::string& body,
-                        std::function<void(HeaderMap& headers)> modify_headers,
-                        bool is_head_request);
+                        std::function<void(HeaderMap& headers)> modify_headers);
     void encode100ContinueHeaders(ActiveStreamEncoderFilter* filter, HeaderMap& headers);
     void encodeHeaders(ActiveStreamEncoderFilter* filter, HeaderMap& headers, bool end_stream);
     void encodeData(ActiveStreamEncoderFilter* filter, Buffer::Instance& data, bool end_stream);
@@ -346,9 +339,6 @@ private:
       // to verify we do not encode100Continue headers more than once per
       // filter.
       static constexpr uint32_t Encode100ContinueHeaders  = 0x40;
-      // Used to indicate that we're processing the final [En|De]codeData frame,
-      // i.e. end_stream = true
-      static constexpr uint32_t LastDataFrame = 0x80;
     };
     // clang-format on
 
@@ -406,7 +396,6 @@ private:
     // By default, we will assume there are no 100-Continue headers. If encode100ContinueHeaders
     // is ever called, this is set to true so commonContinue resumes processing the 100-Continue.
     bool has_continue_headers_{};
-    bool is_head_request_{false};
   };
 
   typedef std::unique_ptr<ActiveStream> ActiveStreamPtr;

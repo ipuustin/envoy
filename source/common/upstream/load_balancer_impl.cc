@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "envoy/runtime/runtime.h"
+#include "envoy/stats/stats.h"
 #include "envoy/upstream/upstream.h"
 
 #include "common/common/assert.h"
@@ -58,13 +59,13 @@ void LoadBalancerBase::recalculatePerPriorityState(uint32_t priority) {
 
   // Determine the health of the newly modified priority level.
   // Health ranges from 0-100, and is the ratio of healthy hosts to total hosts, modified by the
-  // overprovisioning factor.
+  // somewhat arbitrary overprovision factor of kOverProvisioningFactor.
+  // Eventually the overprovision factor will likely be made configurable.
   HostSet& host_set = *priority_set_.hostSetsPerPriority()[priority];
   per_priority_health_[priority] = 0;
   if (host_set.hosts().size() > 0) {
-    per_priority_health_[priority] =
-        std::min<uint32_t>(100, (host_set.overprovisioning_factor() *
-                                 host_set.healthyHosts().size() / host_set.hosts().size()));
+    per_priority_health_[priority] = std::min<uint32_t>(
+        100, kOverProvisioningFactor * host_set.healthyHosts().size() / host_set.hosts().size());
   }
 
   // Now that we've updated health for the changed priority level, we need to caculate percentage
@@ -96,15 +97,7 @@ void LoadBalancerBase::recalculatePerPriorityState(uint32_t priority) {
   }
 }
 
-HostSet& LoadBalancerBase::chooseHostSet(LoadBalancerContext* context) {
-  if (context) {
-    const auto& per_priority_load =
-        context->determinePriorityLoad(priority_set_, per_priority_load_);
-
-    const uint32_t priority = choosePriority(random_.random(), per_priority_load);
-    return *priority_set_.hostSetsPerPriority()[priority];
-  }
-
+HostSet& LoadBalancerBase::chooseHostSet() {
   const uint32_t priority = choosePriority(random_.random(), per_priority_load_);
   return *priority_set_.hostSetsPerPriority()[priority];
 }
@@ -275,24 +268,6 @@ bool ZoneAwareLoadBalancerBase::earlyExitNonLocalityRouting() {
   return false;
 }
 
-HostConstSharedPtr LoadBalancerBase::chooseHost(LoadBalancerContext* context) {
-  HostConstSharedPtr host;
-  const size_t max_attempts = context ? context->hostSelectionRetryCount() + 1 : 1;
-  for (size_t i = 0; i < max_attempts; ++i) {
-    host = chooseHostOnce(context);
-
-    // If host selection failed or the host is accepted by the filter, return.
-    // Otherwise, try again.
-    // Note: in the future we might want to allow retrying when chooseHostOnce returns nullptr.
-    if (!host || !context || !context->shouldSelectAnotherHost(*host)) {
-      return host;
-    }
-  }
-
-  // If we didnt find anything, return the last host.
-  return host;
-}
-
 bool LoadBalancerBase::isGlobalPanic(const HostSet& host_set) {
   uint64_t global_panic_threshold = std::min<uint64_t>(
       100, runtime_.snapshot().getInteger(RuntimePanicThreshold, default_healthy_panic_percent_));
@@ -371,9 +346,8 @@ uint32_t ZoneAwareLoadBalancerBase::tryChooseLocalLocalityHosts(const HostSet& h
   return i;
 }
 
-ZoneAwareLoadBalancerBase::HostsSource
-ZoneAwareLoadBalancerBase::hostSourceToUse(LoadBalancerContext* context) {
-  HostSet& host_set = chooseHostSet(context);
+ZoneAwareLoadBalancerBase::HostsSource ZoneAwareLoadBalancerBase::hostSourceToUse() {
+  HostSet& host_set = chooseHostSet();
   HostsSource hosts_source;
   hosts_source.priority_ = host_set.priority();
 
@@ -498,8 +472,8 @@ void EdfLoadBalancerBase::refresh(uint32_t priority) {
   }
 }
 
-HostConstSharedPtr EdfLoadBalancerBase::chooseHostOnce(LoadBalancerContext* context) {
-  const HostsSource hosts_source = hostSourceToUse(context);
+HostConstSharedPtr EdfLoadBalancerBase::chooseHost(LoadBalancerContext*) {
+  const HostsSource hosts_source = hostSourceToUse();
   auto scheduler_it = scheduler_.find(hosts_source);
   // We should always have a scheduler for any return value from
   // hostSourceToUse() via the construction in refresh();
@@ -540,8 +514,8 @@ HostConstSharedPtr LeastRequestLoadBalancer::unweightedHostPick(const HostVector
   }
 }
 
-HostConstSharedPtr RandomLoadBalancer::chooseHostOnce(LoadBalancerContext* context) {
-  const HostVector& hosts_to_use = hostSourceToHosts(hostSourceToUse(context));
+HostConstSharedPtr RandomLoadBalancer::chooseHost(LoadBalancerContext*) {
+  const HostVector& hosts_to_use = hostSourceToHosts(hostSourceToUse());
   if (hosts_to_use.empty()) {
     return nullptr;
   }

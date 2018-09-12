@@ -11,5 +11,4 @@ envoy_package()
 envoy_cc_library(
     name = "buffer_interface",
     hdrs = ["buffer.h"],
-    deps = ["//include/envoy/api:os_sys_calls_interface"],
 )

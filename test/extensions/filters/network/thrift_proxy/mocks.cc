@@ -2,10 +2,9 @@
 
 #include "gtest/gtest.h"
 
-using testing::_;
-using testing::Invoke;
 using testing::Return;
 using testing::ReturnRef;
+using testing::_;
 
 namespace Envoy {
 namespace Extensions {
@@ -24,27 +23,18 @@ MockTransport::~MockTransport() {}
 MockProtocol::MockProtocol() {
   ON_CALL(*this, name()).WillByDefault(ReturnRef(name_));
   ON_CALL(*this, type()).WillByDefault(Return(type_));
-  ON_CALL(*this, setType(_)).WillByDefault(Invoke([&](ProtocolType type) -> void {
-    type_ = type;
-  }));
 }
 MockProtocol::~MockProtocol() {}
 
 MockDecoderCallbacks::MockDecoderCallbacks() {}
 MockDecoderCallbacks::~MockDecoderCallbacks() {}
 
-MockDecoderEventHandler::MockDecoderEventHandler() {}
-MockDecoderEventHandler::~MockDecoderEventHandler() {}
-
-MockDirectResponse::MockDirectResponse() {}
-MockDirectResponse::~MockDirectResponse() {}
-
 namespace ThriftFilters {
 
 MockDecoderFilter::MockDecoderFilter() {
   ON_CALL(*this, transportBegin(_)).WillByDefault(Return(FilterStatus::Continue));
   ON_CALL(*this, transportEnd()).WillByDefault(Return(FilterStatus::Continue));
-  ON_CALL(*this, messageBegin(_)).WillByDefault(Return(FilterStatus::Continue));
+  ON_CALL(*this, messageBegin(_, _, _)).WillByDefault(Return(FilterStatus::Continue));
   ON_CALL(*this, messageEnd()).WillByDefault(Return(FilterStatus::Continue));
   ON_CALL(*this, structBegin(_)).WillByDefault(Return(FilterStatus::Continue));
   ON_CALL(*this, structEnd()).WillByDefault(Return(FilterStatus::Continue));

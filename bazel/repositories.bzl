@@ -14,9 +14,6 @@ load(
 )
 load("@bazel_tools//tools/cpp:lib_cc_configure.bzl", "get_env_var")
 
-# dict of {build recipe name: longform extension name,}
-PPC_SKIP_TARGETS = {"luajit": "envoy.filters.http.lua"}
-
 def _repository_impl(name, **kwargs):
     # `existing_rule_keys` contains the names of repositories that have already
     # been defined in the Bazel workspace. By skipping repos with existing keys,
@@ -74,9 +71,6 @@ def _repository_impl(name, **kwargs):
             )
 
 def _build_recipe_repository_impl(ctxt):
-    # modify the recipes list based on the build context
-    recipes = _apply_dep_blacklist(ctxt, ctxt.attr.recipes)
-
     # Setup the build directory with links to the relevant files.
     ctxt.symlink(Label("//bazel:repositories.sh"), "repositories.sh")
     ctxt.symlink(Label("//bazel:repositories.bat"), "repositories.bat")
@@ -86,7 +80,7 @@ def _build_recipe_repository_impl(ctxt):
     )
     ctxt.symlink(Label("//ci/build_container:recipe_wrapper.sh"), "recipe_wrapper.sh")
     ctxt.symlink(Label("//ci/build_container:Makefile"), "Makefile")
-    for r in recipes:
+    for r in ctxt.attr.recipes:
         ctxt.symlink(
             Label("//ci/build_container/build_recipes:" + r + ".sh"),
             "build_recipes/" + r + ".sh",
@@ -105,9 +99,9 @@ def _build_recipe_repository_impl(ctxt):
         env["CXX"] = "cl"
         env["CXXFLAGS"] = "-DNDEBUG"
         env["CFLAGS"] = "-DNDEBUG"
-        command = ["./repositories.bat"] + recipes
+        command = ["./repositories.bat"] + ctxt.attr.recipes
     else:
-        command = ["./repositories.sh"] + recipes
+        command = ["./repositories.sh"] + ctxt.attr.recipes
 
     print("Fetching external dependencies...")
     result = ctxt.execute(
@@ -265,7 +259,6 @@ def envoy_dependencies(path = "@envoy_deps//", skip_targets = []):
         name = "envoy_deps",
         recipes = recipes.to_list(),
     )
-
     for t in TARGET_RECIPES:
         if t not in skip_targets:
             native.bind(
@@ -281,7 +274,6 @@ def envoy_dependencies(path = "@envoy_deps//", skip_targets = []):
     # The long repo names (`com_github_fmtlib_fmt` instead of `fmtlib`) are
     # semi-standard in the Bazel community, intended to avoid both duplicate
     # dependencies and name conflicts.
-    _boringssl()
     _com_google_absl()
     _com_github_bombela_backward()
     _com_github_circonus_labs_libcircllhist()
@@ -295,7 +287,6 @@ def envoy_dependencies(path = "@envoy_deps//", skip_targets = []):
     _com_lightstep_tracer_cpp()
     _com_github_grpc_grpc()
     _com_github_google_jwt_verify()
-    _com_github_nanopb_nanopb()
     _com_github_nodejs_http_parser()
     _com_github_tencent_rapidjson()
     _com_google_googletest()
@@ -308,13 +299,6 @@ def envoy_dependencies(path = "@envoy_deps//", skip_targets = []):
     _cc_deps()
     _go_deps(skip_targets)
     _envoy_api_deps()
-
-def _boringssl():
-    _repository_impl("boringssl")
-    native.bind(
-        name = "ssl",
-        actual = "@boringssl//:ssl",
-    )
 
 def _com_github_bombela_backward():
     _repository_impl(
@@ -499,7 +483,7 @@ def _com_github_grpc_grpc():
     )
     native.bind(
         name = "libssl",
-        actual = "//external:ssl",
+        actual = "@openssl_crypto//:openssl-lib",
     )
     native.bind(
         name = "cares",
@@ -516,17 +500,6 @@ def _com_github_grpc_grpc():
         actual = "@envoy//bazel:grpc_health_proto",
     )
 
-def _com_github_nanopb_nanopb():
-    _repository_impl(
-        name = "com_github_nanopb_nanopb",
-        build_file = "@com_github_grpc_grpc//third_party:nanopb.BUILD",
-    )
-
-    native.bind(
-        name = "nanopb",
-        actual = "@com_github_nanopb_nanopb//:nanopb",
-    )
-
 def _com_github_google_jwt_verify():
     _repository_impl("com_github_google_jwt_verify")
 
@@ -534,19 +507,3 @@ def _com_github_google_jwt_verify():
         name = "jwt_verify_lib",
         actual = "@com_github_google_jwt_verify//:jwt_verify_lib",
     )
-
-def _apply_dep_blacklist(ctxt, recipes):
-    newlist = []
-    skip_list = dict()
-    if _is_linux_ppc(ctxt):
-        skip_list = PPC_SKIP_TARGETS
-    for t in recipes:
-        if t not in skip_list.keys():
-            newlist.append(t)
-    return newlist
-
-def _is_linux_ppc(ctxt):
-    if ctxt.os.name != "linux":
-        return False
-    res = ctxt.execute(["uname", "-m"])
-    return "ppc" in res.stdout

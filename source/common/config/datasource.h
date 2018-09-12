@@ -2,8 +2,6 @@
 
 #include "envoy/api/v2/core/base.pb.h"
 
-#include "absl/types/optional.h"
-
 namespace Envoy {
 namespace Config {
 namespace DataSource {
@@ -19,9 +17,9 @@ std::string read(const envoy::api::v2::core::DataSource& source, bool allow_empt
 
 /**
  * @param source data source.
- * @return absl::optional<std::string> path to DataSource if a filename, otherwise absl::nullopt.
+ * @return std::string path to DataSource if a filename, otherwise an empty string.
  */
-absl::optional<std::string> getPath(const envoy::api::v2::core::DataSource& source);
+std::string getPath(const envoy::api::v2::core::DataSource& source);
 
 } // namespace DataSource
 } // namespace Config

@@ -1,3 +1,5 @@
+#define OPENSSL_IS_BORINGSSL
+
 #pragma once
 
 #include <string>
@@ -6,9 +8,10 @@
 #include "envoy/runtime/runtime.h"
 #include "envoy/ssl/context.h"
 #include "envoy/ssl/context_config.h"
-#include "envoy/stats/scope.h"
+#include "envoy/stats/stats.h"
 #include "envoy/stats/stats_macros.h"
 
+#include "common/ssl/bssl_wrapper.h"
 #include "common/ssl/context_impl.h"
 #include "common/ssl/context_manager_impl.h"
 
@@ -153,6 +156,8 @@ class ServerContextImpl : public ContextImpl, public ServerContext {
 public:
   ServerContextImpl(Stats::Scope& scope, const ServerContextConfig& config,
                     const std::vector<std::string>& server_names, Runtime::Loader& runtime);
+protected:
+  static int ssl_tlsext_ticket_key_cb(SSL*, unsigned char*, unsigned char*, EVP_CIPHER_CTX*, HMAC_CTX*, int);
 
 private:
   int alpnSelectCallback(const unsigned char** out, unsigned char* outlen, const unsigned char* in,
@@ -160,6 +165,8 @@ private:
   int sessionTicketProcess(SSL* ssl, uint8_t* key_name, uint8_t* iv, EVP_CIPHER_CTX* ctx,
                            HMAC_CTX* hmac_ctx, int encrypt);
 
+//  int ssl_tlsext_ticket_key_cb(SSL* ssl, uint8_t* key_name, uint8_t* iv, EVP_CIPHER_CTX* ctx, HMAC_CTX* hmac_ctx, int encrypt);
+  
   Runtime::Loader& runtime_;
   std::vector<uint8_t> parsed_alt_alpn_protocols_;
   const std::vector<ServerContextConfig::SessionTicketKey> session_ticket_keys_;

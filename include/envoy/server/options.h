@@ -6,7 +6,7 @@
 
 #include "envoy/common/pure.h"
 #include "envoy/network/address.h"
-#include "envoy/stats/stats_options.h"
+#include "envoy/stats/stats.h"
 
 #include "spdlog/spdlog.h"
 

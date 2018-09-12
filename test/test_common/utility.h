@@ -11,25 +11,21 @@
 #include "envoy/config/bootstrap/v2/bootstrap.pb.h"
 #include "envoy/network/address.h"
 #include "envoy/stats/stats.h"
-#include "envoy/stats/store.h"
 
 #include "common/buffer/buffer_impl.h"
 #include "common/common/c_smart_ptr.h"
-#include "common/common/thread.h"
 #include "common/http/header_map_impl.h"
 #include "common/protobuf/utility.h"
-#include "common/stats/raw_stat_data.h"
+#include "common/stats/stats_impl.h"
 
 #include "test/test_common/printers.h"
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::AssertionFailure;
 using testing::AssertionResult;
 using testing::AssertionSuccess;
-using testing::Invoke;
 
 namespace Envoy {
 #define EXPECT_THROW_WITH_MESSAGE(statement, expected_exception, message)                          \
@@ -79,14 +75,6 @@ namespace Envoy {
     EXPECT_DEATH(statement, message);                                                              \
   } while (false)
 
-#define VERIFY_ASSERTION(statement)                                                                \
-  do {                                                                                             \
-    ::testing::AssertionResult status = statement;                                                 \
-    if (!status) {                                                                                 \
-      return status;                                                                               \
-    }                                                                                              \
-  } while (false)
-
 // Random number generator which logs its seed to stderr. To repeat a test run with a non-zero seed
 // one can run the test with --test_arg=--gtest_random_seed=[seed]
 class TestRandomGenerator {
@@ -102,15 +90,6 @@ private:
 
 class TestUtility {
 public:
-  /**
-   * Compare 2 HeaderMaps.
-   * @param lhs supplies HeaderMaps 1.
-   * @param rhs supplies HeaderMaps 2.
-   * @return TRUE if the HeaderMapss are equal, ignoring the order of the
-   * headers, false if not.
-   */
-  static bool headerMapEqualIgnoreOrder(const Http::HeaderMap& lhs, const Http::HeaderMap& rhs);
-
   /**
    * Compare 2 buffers.
    * @param lhs supplies buffer 1.
@@ -284,8 +263,6 @@ public:
     }
     return result;
   }
-
-  static constexpr std::chrono::milliseconds DefaultTimeout = std::chrono::milliseconds(10000);
 };
 
 /**
@@ -332,12 +309,6 @@ public:
   TestHeaderMapImpl(const std::initializer_list<std::pair<std::string, std::string>>& values);
   TestHeaderMapImpl(const HeaderMap& rhs);
 
-  // The above constructor for TestHeaderMap is not an actual copy constructor.
-  TestHeaderMapImpl(const TestHeaderMapImpl& rhs);
-  TestHeaderMapImpl& operator=(const TestHeaderMapImpl& rhs);
-
-  bool operator==(const TestHeaderMapImpl& rhs) const { return HeaderMapImpl::operator==(rhs); }
-
   friend std::ostream& operator<<(std::ostream& os, const TestHeaderMapImpl& p) {
     p.iterate(
         [](const HeaderEntry& header, void* context) -> HeaderMap::Iterate {
@@ -362,22 +333,22 @@ public:
 } // namespace Http
 
 namespace Stats {
-
 /**
  * This is a heap test allocator that works similar to how the shared memory allocator works in
  * terms of reference counting, etc.
  */
 class TestAllocator : public RawStatDataAllocator {
 public:
-  TestAllocator(const StatsOptions& stats_options) : stats_options_(stats_options) {}
   ~TestAllocator() { EXPECT_TRUE(stats_.empty()); }
 
-  RawStatData* alloc(absl::string_view name) override {
-    CSmartPtr<RawStatData, freeAdapter>& stat_ref = stats_[std::string(name)];
+  RawStatData* alloc(const std::string& name) override {
+    Stats::StatsOptionsImpl stats_options;
+    stats_options.max_obj_name_length_ = 127;
+    CSmartPtr<RawStatData, freeAdapter>& stat_ref = stats_[name];
     if (!stat_ref) {
       stat_ref.reset(static_cast<RawStatData*>(
-          ::calloc(RawStatData::structSizeWithOptions(stats_options_), 1)));
-      stat_ref->initialize(name, stats_options_);
+          ::calloc(RawStatData::structSizeWithOptions(stats_options), 1)));
+      stat_ref->truncateAndInit(name, stats_options);
     } else {
       stat_ref->ref_count_++;
     }
@@ -398,26 +369,9 @@ public:
 private:
   static void freeAdapter(RawStatData* data) { ::free(data); }
   std::unordered_map<std::string, CSmartPtr<RawStatData, freeAdapter>> stats_;
-  const StatsOptions& stats_options_;
-};
-
-class MockedTestAllocator : public RawStatDataAllocator {
-public:
-  MockedTestAllocator(const StatsOptions& stats_options);
-  virtual ~MockedTestAllocator();
-
-  MOCK_METHOD1(alloc, RawStatData*(absl::string_view name));
-  MOCK_METHOD1(free, void(RawStatData& data));
-
-  TestAllocator alloc_;
 };
 
 } // namespace Stats
-
-MATCHER_P(HeaderMapEqualIgnoreOrder, rhs, "") {
-  *result_listener << *rhs << " is not equal to " << *arg;
-  return TestUtility::headerMapEqualIgnoreOrder(*arg, *rhs);
-}
 
 MATCHER_P(ProtoEq, rhs, "") { return TestUtility::protoEqual(arg, rhs); }
 

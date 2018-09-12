@@ -96,13 +96,25 @@ public:
 };
 
 /**
- * Real-world time implementation of TimeSource.
+ * Production implementation of SystemTimeSource that returns the current time.
  */
-class RealTimeSource : public TimeSource {
+class ProdSystemTimeSource : public SystemTimeSource {
 public:
-  // TimeSource
-  SystemTime systemTime() override { return std::chrono::system_clock::now(); }
-  MonotonicTime monotonicTime() override { return std::chrono::steady_clock::now(); }
+  // SystemTimeSource
+  SystemTime currentTime() override { return std::chrono::system_clock::now(); }
+
+  static ProdSystemTimeSource instance_;
+};
+
+/**
+ * Production implementation of MonotonicTimeSource that returns the current time.
+ */
+class ProdMonotonicTimeSource : public MonotonicTimeSource {
+public:
+  // MonotonicTimeSource
+  MonotonicTime currentTime() override { return std::chrono::steady_clock::now(); }
+
+  static ProdMonotonicTimeSource instance_;
 };
 
 /**

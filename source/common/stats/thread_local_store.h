@@ -10,12 +10,7 @@
 
 #include "envoy/thread_local/thread_local.h"
 
-#include "common/stats/heap_stat_data.h"
-#include "common/stats/histogram_impl.h"
-#include "common/stats/source_impl.h"
-#include "common/stats/utility.h"
-
-#include "circllhist.h"
+#include "common/stats/stats_impl.h"
 
 namespace Envoy {
 namespace Stats {
@@ -47,16 +42,12 @@ public:
   void recordValue(uint64_t value) override;
   bool used() const override { return flags_ & Flags::Used; }
 
-  // Stats::Metric
-  const std::string name() const override { return name_; }
-
 private:
   uint64_t otherHistogramIndex() const { return 1 - current_active_; }
   uint64_t current_active_;
   histogram_t* histograms_[2];
   std::atomic<uint16_t> flags_;
   std::thread::id created_thread_id_;
-  const std::string name_;
 };
 
 typedef std::shared_ptr<ThreadLocalHistogramImpl> TlsHistogramSharedPtr;
@@ -90,9 +81,6 @@ public:
   }
   const std::string summary() const override;
 
-  // Stats::Metric
-  const std::string name() const override { return name_; }
-
 private:
   bool usedLockHeld() const EXCLUSIVE_LOCKS_REQUIRED(merge_lock_);
 
@@ -105,7 +93,6 @@ private:
   mutable Thread::MutexBasicLockable merge_lock_;
   std::list<TlsHistogramSharedPtr> tls_histograms_ GUARDED_BY(merge_lock_);
   bool merged_;
-  const std::string name_;
 };
 
 typedef std::shared_ptr<ParentHistogramImpl> ParentHistogramImplSharedPtr;
@@ -243,7 +230,7 @@ private:
 
     template <class StatType>
     using MakeStatFn =
-        std::function<std::shared_ptr<StatType>(StatDataAllocator&, absl::string_view name,
+        std::function<std::shared_ptr<StatType>(StatDataAllocator&, const std::string& name,
                                                 std::string&& tag_extracted_name,
                                                 std::vector<Tag>&& tags)>;
 
@@ -287,7 +274,6 @@ private:
   void clearScopeFromCaches(uint64_t scope_id);
   void releaseScopeCrossThread(ScopeImpl* scope);
   void mergeInternal(PostMergeCb mergeCb);
-  absl::string_view truncateStatNameIfNeeded(absl::string_view name);
 
   const Stats::StatsOptions& stats_options_;
   StatDataAllocator& alloc_;
@@ -301,7 +287,7 @@ private:
   std::atomic<bool> shutting_down_{};
   std::atomic<bool> merge_in_progress_{};
   Counter& num_last_resort_stats_;
-  HeapStatDataAllocator heap_allocator_;
+  HeapRawStatDataAllocator heap_allocator_;
   SourceImpl source_;
 };
 

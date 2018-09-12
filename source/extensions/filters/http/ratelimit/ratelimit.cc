@@ -9,7 +9,6 @@
 #include "common/common/enum_to_int.h"
 #include "common/common/fmt.h"
 #include "common/http/codes.h"
-#include "common/http/header_utility.h"
 #include "common/router/config_impl.h"
 
 namespace Envoy {
@@ -88,25 +87,6 @@ void Filter::setDecoderFilterCallbacks(Http::StreamDecoderFilterCallbacks& callb
   callbacks_ = &callbacks;
 }
 
-Http::FilterHeadersStatus Filter::encode100ContinueHeaders(Http::HeaderMap&) {
-  return Http::FilterHeadersStatus::Continue;
-}
-
-Http::FilterHeadersStatus Filter::encodeHeaders(Http::HeaderMap& headers, bool) {
-  addHeaders(headers);
-  return Http::FilterHeadersStatus::Continue;
-}
-
-Http::FilterDataStatus Filter::encodeData(Buffer::Instance&, bool) {
-  return Http::FilterDataStatus::Continue;
-}
-
-Http::FilterTrailersStatus Filter::encodeTrailers(Http::HeaderMap&) {
-  return Http::FilterTrailersStatus::Continue;
-}
-
-void Filter::setEncoderFilterCallbacks(Http::StreamEncoderFilterCallbacks&) {}
-
 void Filter::onDestroy() {
   if (state_ == State::Calling) {
     state_ = State::Complete;
@@ -114,9 +94,8 @@ void Filter::onDestroy() {
   }
 }
 
-void Filter::complete(RateLimit::LimitStatus status, Http::HeaderMapPtr&& headers) {
+void Filter::complete(RateLimit::LimitStatus status) {
   state_ = State::Complete;
-  headers_to_add_ = std::move(headers);
 
   switch (status) {
   case RateLimit::LimitStatus::OK:
@@ -144,20 +123,8 @@ void Filter::complete(RateLimit::LimitStatus status, Http::HeaderMapPtr&& header
   if (status == RateLimit::LimitStatus::OverLimit &&
       config_->runtime().snapshot().featureEnabled("ratelimit.http_filter_enforcing", 100)) {
     state_ = State::Responded;
-    callbacks_->sendLocalReply(Http::Code::TooManyRequests, "",
-                               [this](Http::HeaderMap& headers) { addHeaders(headers); });
+    callbacks_->sendLocalReply(Http::Code::TooManyRequests, "", nullptr);
     callbacks_->requestInfo().setResponseFlag(RequestInfo::ResponseFlag::RateLimited);
-  } else if (status == RateLimit::LimitStatus::Error) {
-    if (config_->failureModeAllow()) {
-      cluster_->statsScope().counter("ratelimit.failure_mode_allowed").inc();
-      if (!initiating_call_) {
-        callbacks_->continueDecoding();
-      }
-    } else {
-      state_ = State::Responded;
-      callbacks_->sendLocalReply(Http::Code::InternalServerError, "", nullptr);
-      callbacks_->requestInfo().setResponseFlag(RequestInfo::ResponseFlag::RateLimitServiceError);
-    }
   } else if (!initiating_call_) {
     callbacks_->continueDecoding();
   }
@@ -177,13 +144,6 @@ void Filter::populateRateLimitDescriptors(const Router::RateLimitPolicy& rate_li
     }
     rate_limit.populateDescriptors(*route_entry, descriptors, config_->localInfo().clusterName(),
                                    headers, *callbacks_->requestInfo().downstreamRemoteAddress());
-  }
-}
-
-void Filter::addHeaders(Http::HeaderMap& headers) {
-  if (headers_to_add_) {
-    Http::HeaderUtility::addHeaders(headers, *headers_to_add_);
-    headers_to_add_ = nullptr;
   }
 }
 

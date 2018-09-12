@@ -18,13 +18,11 @@
 #include "test/test_common/environment.h"
 #include "test/test_common/network_utility.h"
 #include "test/test_common/printers.h"
-#include "test/test_common/test_time.h"
 #include "test/test_common/utility.h"
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::AtMost;
 using testing::Invoke;
 using testing::InvokeWithoutArgs;
@@ -34,6 +32,7 @@ using testing::Ref;
 using testing::Return;
 using testing::SaveArg;
 using testing::Throw;
+using testing::_;
 
 namespace Envoy {
 namespace Http {
@@ -60,7 +59,6 @@ public:
 
   ~CodecClientTest() { EXPECT_EQ(0U, client_->numActiveRequests()); }
 
-  DangerousDeprecatedTestTime test_time_;
   Event::MockDispatcher dispatcher_;
   Network::MockClientConnection* connection_;
   Http::MockClientConnection* codec_;
@@ -262,7 +260,7 @@ TEST_F(CodecClientTest, WatermarkPassthrough) {
 class CodecNetworkTest : public testing::TestWithParam<Network::Address::IpVersion> {
 public:
   CodecNetworkTest() {
-    dispatcher_.reset(new Event::DispatcherImpl(test_time_.timeSource()));
+    dispatcher_.reset(new Event::DispatcherImpl);
     upstream_listener_ = dispatcher_->createListener(socket_, listener_callbacks_, true, false);
     Network::ClientConnectionPtr client_connection = dispatcher_->createClientConnection(
         socket_.localAddress(), source_address_, Network::Test::createRawBufferSocket(), nullptr);
@@ -328,7 +326,6 @@ public:
   }
 
 protected:
-  DangerousDeprecatedTestTime test_time_;
   Event::DispatcherPtr dispatcher_;
   Network::ListenerPtr upstream_listener_;
   Network::MockListenerCallbacks listener_callbacks_;

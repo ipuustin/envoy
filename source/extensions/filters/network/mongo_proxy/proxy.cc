@@ -8,7 +8,6 @@
 #include "envoy/event/dispatcher.h"
 #include "envoy/filesystem/filesystem.h"
 #include "envoy/runtime/runtime.h"
-#include "envoy/stats/scope.h"
 
 #include "common/common/assert.h"
 #include "common/common/fmt.h"
@@ -42,11 +41,10 @@ void AccessLog::logMessage(const Message& message, bool full,
 ProxyFilter::ProxyFilter(const std::string& stat_prefix, Stats::Scope& scope,
                          Runtime::Loader& runtime, AccessLogSharedPtr access_log,
                          const FaultConfigSharedPtr& fault_config,
-                         const Network::DrainDecision& drain_decision,
-                         Runtime::RandomGenerator& generator)
+                         const Network::DrainDecision& drain_decision)
     : stat_prefix_(stat_prefix), scope_(scope), stats_(generateStats(stat_prefix, scope)),
-      runtime_(runtime), drain_decision_(drain_decision), generator_(generator),
-      access_log_(access_log), fault_config_(fault_config) {
+      runtime_(runtime), drain_decision_(drain_decision), access_log_(access_log),
+      fault_config_(fault_config) {
   if (!runtime_.snapshot().featureEnabled(MongoRuntimeConfig::get().ConnectionLoggingEnabled,
                                           100)) {
     // If we are not logging at the connection level, just release the shared pointer so that we
@@ -322,10 +320,7 @@ absl::optional<uint64_t> ProxyFilter::delayDuration() {
   }
 
   if (!runtime_.snapshot().featureEnabled(MongoRuntimeConfig::get().FixedDelayPercent,
-                                          fault_config_->delayPercentage().numerator(),
-                                          generator_.random(),
-                                          ProtobufPercentHelper::fractionalPercentDenominatorToInt(
-                                              fault_config_->delayPercentage()))) {
+                                          fault_config_->delayPercent())) {
     return result;
   }
 

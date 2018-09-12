@@ -30,8 +30,7 @@ public:
                                    should_weight ? weight : 1));
     }
     HostVectorConstSharedPtr updated_hosts{new HostVector(hosts)};
-    host_set.updateHosts(updated_hosts, updated_hosts, nullptr, nullptr, {}, hosts, {},
-                         absl::nullopt);
+    host_set.updateHosts(updated_hosts, updated_hosts, nullptr, nullptr, {}, hosts, {});
   }
 
   PrioritySetImpl priority_set_;
@@ -98,10 +97,13 @@ BENCHMARK(BM_MaglevLoadBalancerBuildTable)
     ->Arg(500)
     ->Unit(benchmark::kMillisecond);
 
-class TestLoadBalancerContext : public LoadBalancerContextBase {
+class TestLoadBalancerContext : public LoadBalancerContext {
 public:
   // Upstream::LoadBalancerContext
   absl::optional<uint64_t> computeHashKey() override { return hash_key_; }
+  const Router::MetadataMatchCriteria* metadataMatchCriteria() override { return nullptr; }
+  const Network::Connection* downstreamConnection() const override { return nullptr; }
+  const Http::HeaderMap* downstreamHeaders() const override { return nullptr; }
 
   absl::optional<uint64_t> hash_key_;
 };

@@ -25,9 +25,7 @@ public:
   IntegrationStreamDecoderPtr makeHeaderOnlyRequest(const Http::HeaderMap& headers);
   IntegrationStreamDecoderPtr makeRequestWithBody(const Http::HeaderMap& headers,
                                                   uint64_t body_size);
-  bool sawGoAway() const { return saw_goaway_; }
-  bool connected() const { return connected_; }
-  void sendData(Http::StreamEncoder& encoder, absl::string_view data, bool end_stream);
+  bool sawGoAway() { return saw_goaway_; }
   void sendData(Http::StreamEncoder& encoder, Buffer::Instance& data, bool end_stream);
   void sendData(Http::StreamEncoder& encoder, uint64_t size, bool end_stream);
   void sendTrailers(Http::StreamEncoder& encoder, const Http::HeaderMap& trailers);
@@ -82,9 +80,6 @@ public:
 
 protected:
   IntegrationCodecClientPtr makeHttpConnection(uint32_t port);
-  // Makes a http connection object without checking its connected state.
-  IntegrationCodecClientPtr makeRawHttpConnection(Network::ClientConnectionPtr&& conn);
-  // Makes a http connection object with asserting a connected state.
   IntegrationCodecClientPtr makeHttpConnection(Network::ClientConnectionPtr&& conn);
 
   // Sets downstream_protocol_ and alters the HTTP connection manager codec type in the
@@ -161,7 +156,6 @@ protected:
   void testInvalidContentLength();
   void testMultipleContentLengths();
   void testComputedHealthCheck();
-  void testAddEncodedTrailers();
   void testDrainClose();
   void testRetry();
   void testRetryHittingBufferLimit();

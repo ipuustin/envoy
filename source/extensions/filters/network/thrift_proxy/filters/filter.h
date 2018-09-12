@@ -7,17 +7,32 @@
 #include "envoy/buffer/buffer.h"
 #include "envoy/network/connection.h"
 
-#include "extensions/filters/network/thrift_proxy/decoder_events.h"
 #include "extensions/filters/network/thrift_proxy/protocol.h"
 #include "extensions/filters/network/thrift_proxy/router/router.h"
-#include "extensions/filters/network/thrift_proxy/thrift.h"
 #include "extensions/filters/network/thrift_proxy/transport.h"
+
+#include "absl/strings/string_view.h"
+#include "absl/types/optional.h"
 
 namespace Envoy {
 namespace Extensions {
 namespace NetworkFilters {
 namespace ThriftProxy {
 namespace ThriftFilters {
+
+class DirectResponse {
+public:
+  virtual ~DirectResponse() {}
+
+  /**
+   * Encodes the response via the given Protocol.
+   * @param proto the Protocol to be used for message encoding
+   * @param buffer the Buffer into which the message should be encoded
+   */
+  virtual void encode(ThriftProxy::Protocol& proto, Buffer::Instance& buffer) PURE;
+};
+
+typedef std::unique_ptr<DirectResponse> DirectResponsePtr;
 
 /**
  * Decoder filter callbacks add additional callbacks.
@@ -62,9 +77,9 @@ public:
 
   /**
    * Create a locally generated response using the provided response object.
-   * @param response DirectResponse the response to send to the downstream client
+   * @param response DirectResponsePtr the response to send to the downstream client
    */
-  virtual void sendLocalReply(const ThriftProxy::DirectResponse& response) PURE;
+  virtual void sendLocalReply(DirectResponsePtr&& response) PURE;
 
   /**
    * Indicates the start of an upstream response. May only be called once.
@@ -86,10 +101,19 @@ public:
   virtual void resetDownstreamConnection() PURE;
 };
 
+enum class FilterStatus {
+  // Continue filter chain iteration.
+  Continue,
+
+  // Stop iterating over filters in the filter chain. Iteration must be explicitly restarted via
+  // continueDecoding().
+  StopIteration
+};
+
 /**
  * Decoder filter interface.
  */
-class DecoderFilter : public virtual DecoderEventHandler {
+class DecoderFilter {
 public:
   virtual ~DecoderFilter() {}
 
@@ -114,6 +138,120 @@ public:
    * Resets the upstream connection.
    */
   virtual void resetUpstreamConnection() PURE;
+
+  /**
+   * Indicates the start of a Thrift transport frame was detected. Unframed transports generate
+   * simulated start messages.
+   * @param size the size of the message, if available to the transport
+   */
+  virtual FilterStatus transportBegin(absl::optional<uint32_t> size) PURE;
+
+  /**
+   * Indicates the end of a Thrift transport frame was detected. Unframed transport generate
+   * simulated complete messages.
+   */
+  virtual FilterStatus transportEnd() PURE;
+
+  /**
+   * Indicates that the start of a Thrift protocol message was detected.
+   * @param name the name of the message, if available
+   * @param msg_type the type of the message
+   * @param seq_id the message sequence id
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus messageBegin(absl::string_view name, MessageType msg_type,
+                                    int32_t seq_id) PURE;
+
+  /**
+   * Indicates that the end of a Thrift protocol message was detected.
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus messageEnd() PURE;
+
+  /**
+   * Indicates that the start of a Thrift protocol struct was detected.
+   * @param name the name of the struct, if available
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus structBegin(absl::string_view name) PURE;
+
+  /**
+   * Indicates that the end of a Thrift protocol struct was detected.
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus structEnd() PURE;
+
+  /**
+   * Indicates that the start of Thrift protocol struct field was detected.
+   * @param name the name of the field, if available
+   * @param field_type the type of the field
+   * @param field_id the field id
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus fieldBegin(absl::string_view name, FieldType field_type,
+                                  int16_t field_id) PURE;
+
+  /**
+   * Indicates that the end of a Thrift protocol struct field was detected.
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus fieldEnd() PURE;
+
+  /**
+   * A struct field, map key, map value, list element or set element was detected.
+   * @param value type value of the field
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus boolValue(bool value) PURE;
+  virtual FilterStatus byteValue(uint8_t value) PURE;
+  virtual FilterStatus int16Value(int16_t value) PURE;
+  virtual FilterStatus int32Value(int32_t value) PURE;
+  virtual FilterStatus int64Value(int64_t value) PURE;
+  virtual FilterStatus doubleValue(double value) PURE;
+  virtual FilterStatus stringValue(absl::string_view value) PURE;
+
+  /**
+   * Indicates the start of a Thrift protocol map was detected.
+   * @param key_type the map key type
+   * @param value_type the map value type
+   * @param size the number of key-value pairs
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus mapBegin(FieldType key_type, FieldType value_type, uint32_t size) PURE;
+
+  /**
+   * Indicates that the end of a Thrift protocol map was detected.
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus mapEnd() PURE;
+
+  /**
+   * Indicates the start of a Thrift protocol list was detected.
+   * @param elem_type the list value type
+   * @param size the number of values in the list
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus listBegin(FieldType elem_type, uint32_t size) PURE;
+
+  /**
+   * Indicates that the end of a Thrift protocol list was detected.
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus listEnd() PURE;
+
+  /**
+   * Indicates the start of a Thrift protocol set was detected.
+   * @param elem_type the set value type
+   * @param size the number of values in the set
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus setBegin(FieldType elem_type, uint32_t size) PURE;
+
+  /**
+   * Indicates that the end of a Thrift protocol set was detected.
+   * @return FilterStatus to indicate if filter chain iteration should continue
+   */
+  virtual FilterStatus setEnd() PURE;
 };
 
 typedef std::shared_ptr<DecoderFilter> DecoderFilterSharedPtr;

@@ -3,12 +3,12 @@
 #include <vector>
 
 #include "envoy/config/filter/network/ext_authz/v2/ext_authz.pb.validate.h"
-#include "envoy/stats/stats.h"
 
 #include "common/buffer/buffer_impl.h"
 #include "common/json/json_loader.h"
 #include "common/network/address_impl.h"
 #include "common/protobuf/utility.h"
+#include "common/stats/stats_impl.h"
 
 #include "extensions/filters/network/ext_authz/ext_authz.h"
 
@@ -22,13 +22,13 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using testing::_;
 using testing::InSequence;
 using testing::Invoke;
 using testing::NiceMock;
 using testing::Return;
 using testing::ReturnRef;
 using testing::WithArgs;
+using testing::_;
 
 namespace Envoy {
 namespace Extensions {

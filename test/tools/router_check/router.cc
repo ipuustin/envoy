@@ -6,8 +6,8 @@
 #include <unordered_map>
 
 #include "common/network/utility.h"
-#include "common/protobuf/utility.h"
 #include "common/request_info/request_info_impl.h"
+#include "common/stats/stats_impl.h"
 
 #include "test/test_common/printers.h"
 
@@ -41,13 +41,18 @@ ToolConfig::ToolConfig(std::unique_ptr<Http::TestHeaderMapImpl> headers, int ran
     : headers_(std::move(headers)), random_value_(random_value) {}
 
 // static
-RouterCheckTool RouterCheckTool::create(const std::string& router_config_file) {
+RouterCheckTool RouterCheckTool::create(const std::string& router_config_json) {
   // TODO(hennna): Allow users to load a full config and extract the route configuration from it.
+  Json::ObjectSharedPtr loader = Json::Factory::loadFromFile(router_config_json);
   envoy::api::v2::RouteConfiguration route_config;
-  MessageUtil::loadFromFile(router_config_file, route_config);
+  // TODO(ambuc): Add a CLI option to allow for a maxStatNameLength constraint
+  Stats::StatsOptionsImpl stats_options;
+  Config::RdsJson::translateRouteConfiguration(*loader, route_config, stats_options);
 
-  auto factory_context = std::make_unique<NiceMock<Server::Configuration::MockFactoryContext>>();
-  auto config = std::make_unique<Router::ConfigImpl>(route_config, *factory_context, false);
+  std::unique_ptr<NiceMock<Server::Configuration::MockFactoryContext>> factory_context(
+      std::make_unique<NiceMock<Server::Configuration::MockFactoryContext>>());
+  std::unique_ptr<Router::ConfigImpl> config(
+      new Router::ConfigImpl(route_config, *factory_context, false));
 
   return RouterCheckTool(std::move(factory_context), std::move(config));
 }
@@ -72,30 +77,42 @@ bool RouterCheckTool::compareEntriesInJson(const std::string& expected_route_jso
     }
     Json::ObjectSharedPtr validate = check_config->getObject("validate");
 
-    using checkerFunc = std::function<bool(ToolConfig&, const std::string&)>;
-    const std::unordered_map<std::string, checkerFunc> checkers = {
-        {"cluster_name",
-         [this](auto&... params) -> bool { return this->compareCluster(params...); }},
-        {"virtual_cluster_name",
-         [this](auto&... params) -> bool { return this->compareVirtualCluster(params...); }},
-        {"virtual_host_name",
-         [this](auto&... params) -> bool { return this->compareVirtualHost(params...); }},
-        {"path_rewrite",
-         [this](auto&... params) -> bool { return this->compareRewritePath(params...); }},
-        {"host_rewrite",
-         [this](auto&... params) -> bool { return this->compareRewriteHost(params...); }},
-        {"path_redirect",
-         [this](auto&... params) -> bool { return this->compareRedirectPath(params...); }},
-    };
+    const std::unordered_map<std::string, std::function<bool(ToolConfig&, const std::string&)>>
+        checkers = {
+            {"cluster_name",
+             [this](ToolConfig& tool_config, const std::string& expected) -> bool {
+               return compareCluster(tool_config, expected);
+             }},
+            {"virtual_cluster_name",
+             [this](ToolConfig& tool_config, const std::string& expected) -> bool {
+               return compareVirtualCluster(tool_config, expected);
+             }},
+            {"virtual_host_name",
+             [this](ToolConfig& tool_config, const std::string& expected) -> bool {
+               return compareVirtualHost(tool_config, expected);
+             }},
+            {"path_rewrite",
+             [this](ToolConfig& tool_config, const std::string& expected) -> bool {
+               return compareRewritePath(tool_config, expected);
+             }},
+            {"host_rewrite",
+             [this](ToolConfig& tool_config, const std::string& expected) -> bool {
+               return compareRewriteHost(tool_config, expected);
+             }},
+            {"path_redirect",
+             [this](ToolConfig& tool_config, const std::string& expected) -> bool {
+               return compareRedirectPath(tool_config, expected);
+             }},
+        };
 
-    // Call appropriate function for each match case.
-    for (const auto& test : checkers) {
+    // Call appropriate function for each match case
+    for (std::pair<std::string, std::function<bool(ToolConfig&, std::string)>> test : checkers) {
       if (validate->hasObject(test.first)) {
-        const std::string& expected = validate->getString(test.first);
+        std::string expected = validate->getString(test.first);
         if (tool_config.route_ == nullptr) {
           compareResults("", expected, test.first);
         } else {
-          if (!test.second(tool_config, expected)) {
+          if (!test.second(tool_config, validate->getString(test.first))) {
             no_failures = false;
           }
         }
@@ -121,7 +138,6 @@ bool RouterCheckTool::compareEntriesInJson(const std::string& expected_route_jso
       }
     }
   }
-
   return no_failures;
 }
 

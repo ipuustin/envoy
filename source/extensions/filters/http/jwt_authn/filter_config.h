@@ -1,7 +1,6 @@
 #pragma once
 
 #include "envoy/server/filter_config.h"
-#include "envoy/stats/scope.h"
 #include "envoy/stats/stats_macros.h"
 #include "envoy/thread_local/thread_local.h"
 

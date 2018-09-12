@@ -4,7 +4,6 @@ load(
     "//bazel:envoy_build_system.bzl",
     "envoy_basic_cc_library",
     "envoy_cc_library",
-    "envoy_cc_test",
     "envoy_cc_test_library",
     "envoy_package",
 )
@@ -79,7 +78,6 @@ envoy_cc_test_library(
         "//include/envoy/http:codec_interface",
         "//include/envoy/network:address_interface",
         "//source/common/common:empty_string",
-        "//source/common/common:thread_lib",
         "//source/common/common:utility_lib",
         "//source/common/config:bootstrap_json_lib",
         "//source/common/http:header_map_lib",
@@ -88,16 +86,7 @@ envoy_cc_test_library(
         "//source/common/network:utility_lib",
         "//source/common/protobuf:utility_lib",
         "//source/common/stats:stats_lib",
-        "//source/common/stats:stats_options_lib",
         "@envoy_api//envoy/config/bootstrap/v2:bootstrap_cc",
-    ],
-)
-
-envoy_cc_test(
-    name = "utility_test",
-    srcs = ["utility_test.cc"],
-    deps = [
-        ":utility_lib",
     ],
 )
 
@@ -119,21 +108,12 @@ envoy_cc_library(
     ],
 )
 
-envoy_cc_test_library(
-    name = "test_time_lib",
-    srcs = ["test_time.cc"],
-    hdrs = ["test_time.h"],
-    deps = [
-        "//source/common/event:real_time_system_lib",
-    ],
-)
-
 envoy_cc_library(
     name = "tls_utility_lib",
     srcs = ["tls_utility.cc"],
     hdrs = ["tls_utility.h"],
-    external_deps = ["ssl"],
     deps = [
+        "@openssl_crypto//:openssl-lib",
         "//source/common/common:assert_lib",
     ],
 )

@@ -15,6 +15,5 @@ envoy_cc_test(
         "//source/common/event:dispatcher_lib",
         "//source/common/thread_local:thread_local_lib",
         "//test/mocks/event:event_mocks",
-        "//test/test_common:test_time_lib",
     ],
 )

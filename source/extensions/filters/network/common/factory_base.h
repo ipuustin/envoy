@@ -1,7 +1,6 @@
 #pragma once
 
 #include "envoy/server/filter_config.h"
-#include "envoy/upstream/upstream.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -12,7 +11,7 @@ namespace Common {
  * Common base class for network filter factory registrations. Removes a substantial amount of
  * boilerplate.
  */
-template <class ConfigProto, class ProtocolOptionsProto = ConfigProto>
+template <class ConfigProto>
 class FactoryBase : public Server::Configuration::NamedNetworkFilterConfigFactory {
 public:
   // Server::Configuration::NamedNetworkFilterConfigFactory
@@ -33,16 +32,6 @@ public:
     return std::make_unique<ConfigProto>();
   }
 
-  ProtobufTypes::MessagePtr createEmptyProtocolOptionsProto() override {
-    return std::make_unique<ProtocolOptionsProto>();
-  }
-
-  Upstream::ProtocolOptionsConfigConstSharedPtr
-  createProtocolOptionsConfig(const Protobuf::Message& proto_config) override {
-    return createProtocolOptionsTyped(
-        MessageUtil::downcastAndValidate<const ProtocolOptionsProto&>(proto_config));
-  }
-
   std::string name() override { return name_; }
 
 protected:
@@ -52,11 +41,6 @@ private:
   virtual Network::FilterFactoryCb
   createFilterFactoryFromProtoTyped(const ConfigProto& proto_config,
                                     Server::Configuration::FactoryContext& context) PURE;
-
-  virtual Upstream::ProtocolOptionsConfigConstSharedPtr
-  createProtocolOptionsTyped(const ProtocolOptionsProto&) {
-    throw EnvoyException(fmt::format("filter {} does not support protocol options", name_));
-  }
 
   const std::string name_;
 };

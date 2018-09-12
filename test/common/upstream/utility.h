@@ -1,12 +1,13 @@
 #pragma once
 
+#include "envoy/stats/stats.h"
 #include "envoy/upstream/upstream.h"
 
 #include "common/common/utility.h"
 #include "common/config/cds_json.h"
 #include "common/json/json_loader.h"
 #include "common/network/utility.h"
-#include "common/stats/stats_options_impl.h"
+#include "common/stats/stats_impl.h"
 #include "common/upstream/upstream_impl.h"
 
 #include "fmt/printf.h"

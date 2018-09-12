@@ -18,7 +18,8 @@ namespace ThriftProxy {
 const uint16_t CompactProtocolImpl::Magic = 0x8201;
 const uint16_t CompactProtocolImpl::MagicMask = 0xFF1F;
 
-bool CompactProtocolImpl::readMessageBegin(Buffer::Instance& buffer, MessageMetadata& metadata) {
+bool CompactProtocolImpl::readMessageBegin(Buffer::Instance& buffer, std::string& name,
+                                           MessageType& msg_type, int32_t& seq_id) {
   // Minimum message length:
   //   protocol, message type, and version: 2 bytes +
   //   seq id (var int): 1 byte +
@@ -63,14 +64,13 @@ bool CompactProtocolImpl::readMessageBegin(Buffer::Instance& buffer, MessageMeta
   buffer.drain(id_size + name_len_size + 2);
 
   if (name_len > 0) {
-    metadata.setMethodName(
-        std::string(static_cast<const char*>(buffer.linearize(name_len)), name_len));
+    name.assign(std::string(static_cast<char*>(buffer.linearize(name_len)), name_len));
     buffer.drain(name_len);
   } else {
-    metadata.setMethodName("");
+    name.clear();
   }
-  metadata.setMessageType(type);
-  metadata.setSequenceId(id);
+  msg_type = type;
+  seq_id = id;
 
   return true;
 }
@@ -373,7 +373,7 @@ bool CompactProtocolImpl::readString(Buffer::Instance& buffer, std::string& valu
   }
 
   buffer.drain(len_size);
-  value.assign(static_cast<const char*>(buffer.linearize(str_len)), str_len);
+  value.assign(static_cast<char*>(buffer.linearize(str_len)), str_len);
   buffer.drain(str_len);
   return true;
 }
@@ -382,17 +382,17 @@ bool CompactProtocolImpl::readBinary(Buffer::Instance& buffer, std::string& valu
   return readString(buffer, value);
 }
 
-void CompactProtocolImpl::writeMessageBegin(Buffer::Instance& buffer,
-                                            const MessageMetadata& metadata) {
-  MessageType msg_type = metadata.messageType();
+void CompactProtocolImpl::writeMessageBegin(Buffer::Instance& buffer, const std::string& name,
+                                            MessageType msg_type, int32_t seq_id) {
+  UNREFERENCED_PARAMETER(name);
 
   uint16_t ptv = (Magic & MagicMask) | (static_cast<uint16_t>(msg_type) << 5);
   ASSERT((ptv & MagicMask) == Magic);
   ASSERT((ptv & ~MagicMask) >> 5 == static_cast<uint16_t>(msg_type));
 
   BufferHelper::writeU16(buffer, ptv);
-  BufferHelper::writeVarIntI32(buffer, metadata.sequenceId());
-  writeString(buffer, metadata.methodName());
+  BufferHelper::writeVarIntI32(buffer, seq_id);
+  writeString(buffer, name);
 }
 
 void CompactProtocolImpl::writeMessageEnd(Buffer::Instance& buffer) {

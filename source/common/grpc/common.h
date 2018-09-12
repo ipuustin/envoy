@@ -8,6 +8,7 @@
 #include "envoy/http/filter.h"
 #include "envoy/http/header_map.h"
 #include "envoy/http/message.h"
+#include "envoy/stats/stats.h"
 
 #include "common/grpc/status.h"
 #include "common/protobuf/protobuf.h"

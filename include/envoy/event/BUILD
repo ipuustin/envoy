@@ -20,8 +20,7 @@ envoy_cc_library(
         ":deferred_deletable",
         ":file_event_interface",
         ":signal_interface",
-        "//include/envoy/common:time_interface",
-        "//include/envoy/event:timer_interface",
+        ":timer_interface",
         "//include/envoy/filesystem:filesystem_interface",
         "//include/envoy/network:connection_handler_interface",
         "//include/envoy/network:connection_interface",
@@ -45,7 +44,4 @@ envoy_cc_library(
 envoy_cc_library(
     name = "timer_interface",
     hdrs = ["timer.h"],
-    deps = [
-        "//source/common/event:libevent_lib",
-    ],
 )

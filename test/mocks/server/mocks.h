@@ -12,16 +12,14 @@
 #include "envoy/server/health_checker_config.h"
 #include "envoy/server/instance.h"
 #include "envoy/server/options.h"
-#include "envoy/server/overload_manager.h"
 #include "envoy/server/transport_socket_config.h"
 #include "envoy/server/worker.h"
 #include "envoy/ssl/context_manager.h"
-#include "envoy/stats/scope.h"
-#include "envoy/stats/stats_options.h"
 #include "envoy/thread/thread.h"
 
 #include "common/secret/secret_manager_impl.h"
 #include "common/ssl/context_manager_impl.h"
+#include "common/stats/stats_impl.h"
 
 #include "test/mocks/access_log/mocks.h"
 #include "test/mocks/api/mocks.h"
@@ -80,11 +78,8 @@ public:
   std::string service_cluster_name_;
   std::string service_node_name_;
   std::string service_zone_name_;
-  spdlog::level::level_enum log_level_{spdlog::level::trace};
   std::string log_path_;
   Stats::StatsOptionsImpl stats_options_;
-  uint32_t concurrency_{1};
-  uint64_t hot_restart_epoch_{};
   bool hot_restart_disabled_{};
 };
 
@@ -117,8 +112,10 @@ public:
   MOCK_METHOD1(removeHandler, bool(const std::string& prefix));
   MOCK_METHOD0(socket, Network::Socket&());
   MOCK_METHOD0(getConfigTracker, ConfigTracker&());
-  MOCK_METHOD4(request, Http::Code(absl::string_view path_and_query, absl::string_view method,
-                                   Http::HeaderMap& response_headers, std::string& body));
+  MOCK_METHOD5(request,
+               Http::Code(absl::string_view path, const Http::Utility::QueryParams& query_params,
+                          absl::string_view method, Http::HeaderMap& response_headers,
+                          std::string& body));
 
   NiceMock<MockConfigTracker> config_tracker_;
 };
@@ -176,12 +173,12 @@ public:
   MOCK_METHOD0(version, std::string());
   MOCK_METHOD0(logLock, Thread::BasicLockable&());
   MOCK_METHOD0(accessLogLock, Thread::BasicLockable&());
-  MOCK_METHOD0(statsAllocator, Stats::StatDataAllocator&());
+  MOCK_METHOD0(statsAllocator, Stats::RawStatDataAllocator&());
 
 private:
   Thread::MutexBasicLockable log_lock_;
   Thread::MutexBasicLockable access_log_lock_;
-  Stats::HeapStatDataAllocator stats_allocator_;
+  Stats::HeapRawStatDataAllocator stats_allocator_;
 };
 
 class MockListenerComponentFactory : public ListenerComponentFactory {
@@ -274,18 +271,6 @@ public:
   std::function<void()> remove_listener_completion_;
 };
 
-class MockOverloadManager : public OverloadManager {
-public:
-  MockOverloadManager() {}
-  ~MockOverloadManager() {}
-
-  // OverloadManager
-  MOCK_METHOD0(start, void());
-  MOCK_METHOD3(registerForAction, void(const std::string& action, Event::Dispatcher& dispatcher,
-                                       OverloadActionCb callback));
-  MOCK_METHOD0(getThreadLocalOverloadState, ThreadLocalOverloadState&());
-};
-
 class MockInstance : public Instance {
 public:
   MockInstance();
@@ -314,7 +299,6 @@ public:
   MOCK_METHOD0(initManager, Init::Manager&());
   MOCK_METHOD0(listenerManager, ListenerManager&());
   MOCK_METHOD0(options, Options&());
-  MOCK_METHOD0(overloadManager, OverloadManager&());
   MOCK_METHOD0(random, Runtime::RandomGenerator&());
   MOCK_METHOD0(rateLimitClient_, RateLimit::Client*());
   MOCK_METHOD0(runtime, Runtime::Loader&());
@@ -327,7 +311,6 @@ public:
   MOCK_METHOD0(httpTracer, Tracing::HttpTracer&());
   MOCK_METHOD0(threadLocal, ThreadLocal::Instance&());
   MOCK_METHOD0(localInfo, const LocalInfo::LocalInfo&());
-  MOCK_METHOD0(timeSource, Event::TimeSystem&());
   MOCK_CONST_METHOD0(statsFlushInterval, std::chrono::milliseconds());
 
   std::unique_ptr<Secret::SecretManager> secret_manager_;
@@ -351,8 +334,6 @@ public:
   testing::NiceMock<LocalInfo::MockLocalInfo> local_info_;
   testing::NiceMock<Init::MockManager> init_manager_;
   testing::NiceMock<MockListenerManager> listener_manager_;
-  testing::NiceMock<MockOverloadManager> overload_manager_;
-  DangerousDeprecatedTestTime test_time_;
   Singleton::ManagerPtr singleton_manager_;
 };
 
@@ -405,7 +386,7 @@ public:
   MOCK_METHOD0(listenerScope, Stats::Scope&());
   MOCK_CONST_METHOD0(localInfo, const LocalInfo::LocalInfo&());
   MOCK_CONST_METHOD0(listenerMetadata, const envoy::api::v2::core::Metadata&());
-  MOCK_METHOD0(timeSource, TimeSource&());
+  MOCK_METHOD0(systemTimeSource, SystemTimeSource&());
 
   testing::NiceMock<AccessLog::MockAccessLogManager> access_log_manager_;
   testing::NiceMock<Upstream::MockClusterManager> cluster_manager_;
@@ -421,7 +402,7 @@ public:
   Singleton::ManagerPtr singleton_manager_;
   testing::NiceMock<MockAdmin> admin_;
   Stats::IsolatedStoreImpl listener_scope_;
-  testing::NiceMock<MockTimeSource> time_source_;
+  testing::NiceMock<MockSystemTimeSource> system_time_source_;
 };
 
 class MockTransportSocketFactoryContext : public TransportSocketFactoryContext {
@@ -429,19 +410,8 @@ public:
   MockTransportSocketFactoryContext();
   ~MockTransportSocketFactoryContext();
 
-  Secret::SecretManager& secretManager() override { return *(secret_manager_.get()); }
-
   MOCK_METHOD0(sslContextManager, Ssl::ContextManager&());
   MOCK_CONST_METHOD0(statsScope, Stats::Scope&());
-  MOCK_METHOD0(clusterManager, Upstream::ClusterManager&());
-  MOCK_METHOD0(localInfo, const LocalInfo::LocalInfo&());
-  MOCK_METHOD0(dispatcher, Event::Dispatcher&());
-  MOCK_METHOD0(random, Envoy::Runtime::RandomGenerator&());
-  MOCK_METHOD0(stats, Stats::Store&());
-  MOCK_METHOD1(setInitManager, void(Init::Manager&));
-  MOCK_METHOD0(initManager, Init::Manager*());
-
-  std::unique_ptr<Secret::SecretManager> secret_manager_;
 };
 
 class MockListenerFactoryContext : public virtual MockFactoryContext,
@@ -479,18 +449,6 @@ public:
   testing::NiceMock<Envoy::Runtime::MockRandomGenerator> random_;
   testing::NiceMock<Envoy::Runtime::MockLoader> runtime_;
   testing::NiceMock<Envoy::Upstream::MockHealthCheckEventLogger>* event_logger_{};
-};
-
-class MockAdminStream : public AdminStream {
-public:
-  MockAdminStream();
-  ~MockAdminStream();
-
-  MOCK_METHOD1(setEndStreamOnComplete, void(bool));
-  MOCK_METHOD1(addOnDestroyCallback, void(std::function<void()>));
-  MOCK_CONST_METHOD0(getRequestHeaders, Http::HeaderMap&());
-  MOCK_CONST_METHOD0(getDecoderFilterCallbacks,
-                     NiceMock<Http::MockStreamDecoderFilterCallbacks>&());
 };
 
 } // namespace Configuration

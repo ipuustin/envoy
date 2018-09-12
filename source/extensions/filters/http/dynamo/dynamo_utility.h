@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "envoy/stats/stats_options.h"
+#include "envoy/stats/stats.h"
 
 namespace Envoy {
 namespace Extensions {

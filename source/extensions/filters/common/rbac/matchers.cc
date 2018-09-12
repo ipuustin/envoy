@@ -135,14 +135,14 @@ bool AuthenticatedMatcher::matches(const Network::Connection& connection,
   const auto* ssl = connection.ssl();
   if (!ssl) { // connection was not authenticated
     return false;
-  } else if (!matcher_.has_value()) { // matcher allows any subject
+  } else if (name_.empty()) { // matcher allows any subject
     return true;
   }
 
   std::string principal = ssl->uriSanPeerCertificate();
   principal = principal.empty() ? ssl->subjectPeerCertificate() : principal;
 
-  return matcher_.value().match(principal);
+  return principal == name_;
 }
 
 bool MetadataMatcher::matches(const Network::Connection&, const Envoy::Http::HeaderMap&,

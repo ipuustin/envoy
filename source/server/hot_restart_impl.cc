@@ -18,8 +18,6 @@
 #include "common/common/lock_guard.h"
 #include "common/common/utility.h"
 #include "common/network/utility.h"
-#include "common/stats/raw_stat_data.h"
-#include "common/stats/stats_options_impl.h"
 
 #include "absl/strings/string_view.h"
 
@@ -55,21 +53,18 @@ SharedMemory& SharedMemory::initialize(uint64_t stats_set_size, Options& options
     os_sys_calls.shmUnlink(shmem_name.c_str());
   }
 
-  const Api::SysCallIntResult result =
-      os_sys_calls.shmOpen(shmem_name.c_str(), flags, S_IRUSR | S_IWUSR);
-  if (result.rc_ == -1) {
-    PANIC(fmt::format("cannot open shared memory region {} check user permissions. Error: {}",
-                      shmem_name, strerror(result.errno_)));
+  int shmem_fd = os_sys_calls.shmOpen(shmem_name.c_str(), flags, S_IRUSR | S_IWUSR);
+  if (shmem_fd == -1) {
+    PANIC(fmt::format("cannot open shared memory region {} check user permissions", shmem_name));
   }
 
   if (options.restartEpoch() == 0) {
-    const Api::SysCallIntResult truncateRes = os_sys_calls.ftruncate(result.rc_, total_size);
-    RELEASE_ASSERT(truncateRes.rc_ != -1, "");
+    int rc = os_sys_calls.ftruncate(shmem_fd, total_size);
+    RELEASE_ASSERT(rc != -1, "");
   }
 
-  const Api::SysCallPtrResult mmapRes =
-      os_sys_calls.mmap(nullptr, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, result.rc_, 0);
-  SharedMemory* shmem = reinterpret_cast<SharedMemory*>(mmapRes.rc_);
+  SharedMemory* shmem = reinterpret_cast<SharedMemory*>(
+      os_sys_calls.mmap(nullptr, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, shmem_fd, 0));
   RELEASE_ASSERT(shmem != MAP_FAILED, "");
   RELEASE_ASSERT((reinterpret_cast<uintptr_t>(shmem) % alignof(decltype(shmem))) == 0, "");
 
@@ -146,14 +141,14 @@ HotRestartImpl::HotRestartImpl(Options& options)
   RELEASE_ASSERT(rc != -1, "");
 }
 
-Stats::RawStatData* HotRestartImpl::alloc(absl::string_view name) {
+Stats::RawStatData* HotRestartImpl::alloc(const std::string& name) {
   // Try to find the existing slot in shared memory, otherwise allocate a new one.
   Thread::LockGuard lock(stat_lock_);
-  // In production, the name is truncated in ThreadLocalStore before this
-  // is called. This is just a sanity check to make sure that actually happens;
-  // it is coded as an if/return-null to facilitate testing.
-  ASSERT(name.length() <= options_.statsOptions().maxNameLength());
-  auto value_created = stats_set_->insert(name);
+  absl::string_view key = name;
+  if (key.size() > options_.statsOptions().maxNameLength()) {
+    key.remove_suffix(key.size() - options_.statsOptions().maxNameLength());
+  }
+  auto value_created = stats_set_->insert(key);
   Stats::RawStatData* data = value_created.first;
   if (data == nullptr) {
     return nullptr;
@@ -186,9 +181,8 @@ int HotRestartImpl::bindDomainSocket(uint64_t id) {
   // easily read single messages.
   int fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_NONBLOCK, 0);
   sockaddr_un address = createDomainSocketAddress(id);
-  Api::SysCallIntResult result =
-      os_sys_calls.bind(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address));
-  if (result.rc_ != 0) {
+  int rc = os_sys_calls.bind(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address));
+  if (rc != 0) {
     throw EnvoyException(
         fmt::format("unable to bind domain socket with id={} (see --base-id option)", id));
   }

@@ -15,7 +15,8 @@ class FixedHeapMonitorFactory
     : public Common::FactoryBase<
           envoy::config::resource_monitor::fixed_heap::v2alpha::FixedHeapConfig> {
 public:
-  FixedHeapMonitorFactory() : FactoryBase(ResourceMonitorNames::get().FixedHeap) {}
+  FixedHeapMonitorFactory()
+      : FactoryBase(ResourceMonitorNames::get().FIXED_HEAP_RESOURCE_MONITOR) {}
 
 private:
   Server::ResourceMonitorPtr createResourceMonitorFromProtoTyped(

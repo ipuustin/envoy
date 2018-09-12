@@ -11,7 +11,6 @@
 
 #include "envoy/common/exception.h"
 
-#include "common/api/os_sys_calls_impl.h"
 #include "common/common/assert.h"
 #include "common/common/fmt.h"
 #include "common/common/utility.h"
@@ -46,12 +45,11 @@ void validateIpv6Supported(const std::string& address) {
 
 // Check if an IP family is supported on this machine.
 bool ipFamilySupported(int domain) {
-  Api::OsSysCalls& os_sys_calls = Api::OsSysCallsSingleton::get();
-  const Api::SysCallIntResult result = os_sys_calls.socket(domain, SOCK_STREAM, 0);
-  if (result.rc_ >= 0) {
-    RELEASE_ASSERT(os_sys_calls.close(result.rc_).rc_ == 0, "");
+  const int fd = ::socket(domain, SOCK_STREAM, 0);
+  if (fd >= 0) {
+    RELEASE_ASSERT(::close(fd) == 0, "");
   }
-  return result.rc_ != -1;
+  return fd != -1;
 }
 
 Address::InstanceConstSharedPtr addressFromSockAddr(const sockaddr_storage& ss, socklen_t ss_len,
@@ -214,16 +212,14 @@ bool Ipv4Instance::operator==(const Instance& rhs) const {
           (ip_.port() == rhs_casted->ip_.port()));
 }
 
-Api::SysCallIntResult Ipv4Instance::bind(int fd) const {
-  const int rc = ::bind(fd, reinterpret_cast<const sockaddr*>(&ip_.ipv4_.address_),
-                        sizeof(ip_.ipv4_.address_));
-  return {rc, errno};
+int Ipv4Instance::bind(int fd) const {
+  return ::bind(fd, reinterpret_cast<const sockaddr*>(&ip_.ipv4_.address_),
+                sizeof(ip_.ipv4_.address_));
 }
 
-Api::SysCallIntResult Ipv4Instance::connect(int fd) const {
-  const int rc = ::connect(fd, reinterpret_cast<const sockaddr*>(&ip_.ipv4_.address_),
-                           sizeof(ip_.ipv4_.address_));
-  return {rc, errno};
+int Ipv4Instance::connect(int fd) const {
+  return ::connect(fd, reinterpret_cast<const sockaddr*>(&ip_.ipv4_.address_),
+                   sizeof(ip_.ipv4_.address_));
 }
 
 int Ipv4Instance::socket(SocketType type) const { return socketFromSocketType(type); }
@@ -279,20 +275,19 @@ bool Ipv6Instance::operator==(const Instance& rhs) const {
           (ip_.port() == rhs_casted->ip_.port()));
 }
 
-Api::SysCallIntResult Ipv6Instance::bind(int fd) const {
-  const int rc = ::bind(fd, reinterpret_cast<const sockaddr*>(&ip_.ipv6_.address_),
-                        sizeof(ip_.ipv6_.address_));
-  return {rc, errno};
+int Ipv6Instance::bind(int fd) const {
+  return ::bind(fd, reinterpret_cast<const sockaddr*>(&ip_.ipv6_.address_),
+                sizeof(ip_.ipv6_.address_));
 }
 
-Api::SysCallIntResult Ipv6Instance::connect(int fd) const {
-  const int rc = ::connect(fd, reinterpret_cast<const sockaddr*>(&ip_.ipv6_.address_),
-                           sizeof(ip_.ipv6_.address_));
-  return {rc, errno};
+int Ipv6Instance::connect(int fd) const {
+  return ::connect(fd, reinterpret_cast<const sockaddr*>(&ip_.ipv6_.address_),
+                   sizeof(ip_.ipv6_.address_));
 }
 
 int Ipv6Instance::socket(SocketType type) const {
   const int fd = socketFromSocketType(type);
+
   // Setting IPV6_V6ONLY resticts the IPv6 socket to IPv6 connections only.
   const int v6only = ip_.v6only_;
   RELEASE_ASSERT(::setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only)) != -1, "");
@@ -338,28 +333,24 @@ PipeInstance::PipeInstance(const std::string& pipe_path) : InstanceBase(Type::Pi
 
 bool PipeInstance::operator==(const Instance& rhs) const { return asString() == rhs.asString(); }
 
-Api::SysCallIntResult PipeInstance::bind(int fd) const {
+int PipeInstance::bind(int fd) const {
   if (abstract_namespace_) {
-    const int rc = ::bind(fd, reinterpret_cast<const sockaddr*>(&address_),
-                          offsetof(struct sockaddr_un, sun_path) + address_length_);
-    return {rc, errno};
+    return ::bind(fd, reinterpret_cast<const sockaddr*>(&address_),
+                  offsetof(struct sockaddr_un, sun_path) + address_length_);
   }
   // Try to unlink an existing filesystem object at the requested path. Ignore
   // errors -- it's fine if the path doesn't exist, and if it exists but can't
   // be unlinked then `::bind()` will generate a reasonable errno.
   unlink(address_.sun_path);
-  const int rc = ::bind(fd, reinterpret_cast<const sockaddr*>(&address_), sizeof(address_));
-  return {rc, errno};
+  return ::bind(fd, reinterpret_cast<const sockaddr*>(&address_), sizeof(address_));
 }
 
-Api::SysCallIntResult PipeInstance::connect(int fd) const {
+int PipeInstance::connect(int fd) const {
   if (abstract_namespace_) {
-    const int rc = ::connect(fd, reinterpret_cast<const sockaddr*>(&address_),
-                             offsetof(struct sockaddr_un, sun_path) + address_length_);
-    return {rc, errno};
+    return ::connect(fd, reinterpret_cast<const sockaddr*>(&address_),
+                     offsetof(struct sockaddr_un, sun_path) + address_length_);
   }
-  const int rc = ::connect(fd, reinterpret_cast<const sockaddr*>(&address_), sizeof(address_));
-  return {rc, errno};
+  return ::connect(fd, reinterpret_cast<const sockaddr*>(&address_), sizeof(address_));
 }
 
 int PipeInstance::socket(SocketType type) const { return socketFromSocketType(type); }

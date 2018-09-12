@@ -91,8 +91,7 @@ public:
    */
   Driver(const Json::Object& config, Upstream::ClusterManager& cluster_manager, Stats::Store& stats,
          ThreadLocal::SlotAllocator& tls, Runtime::Loader& runtime,
-         const LocalInfo::LocalInfo& localinfo, Runtime::RandomGenerator& random_generator,
-         TimeSource& time_source);
+         const LocalInfo::LocalInfo& localinfo, Runtime::RandomGenerator& random_generator);
 
   /**
    * This function is inherited from the abstract Driver class.
@@ -131,7 +130,6 @@ private:
   ThreadLocal::SlotPtr tls_;
   Runtime::Loader& runtime_;
   const LocalInfo::LocalInfo& local_info_;
-  TimeSource& time_source_;
 };
 
 /**
@@ -206,7 +204,7 @@ private:
   SpanBuffer span_buffer_;
   const std::string collector_endpoint_;
 };
-} // namespace Zipkin
+}
 } // namespace Tracers
 } // namespace Extensions
 } // namespace Envoy

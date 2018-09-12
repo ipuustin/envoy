@@ -21,6 +21,7 @@ void Filter::onDestroy() {
 
 Http::FilterHeadersStatus Filter::decodeHeaders(Http::HeaderMap& headers, bool) {
   ENVOY_LOG(debug, "Called Filter : {}", __func__);
+
   // Remove headers configured to pass payload
   auth_->sanitizePayloadHeaders(headers);
 
@@ -50,8 +51,8 @@ void Filter::onComplete(const Status& status) {
     // verification failed
     Http::Code code = Http::Code::Unauthorized;
     // return failure reason as message body
-    decoder_callbacks_->sendLocalReply(code, ::google::jwt_verify::getStatusString(status),
-                                       nullptr);
+    Http::Utility::sendLocalReply(false, *decoder_callbacks_, false, code,
+                                  ::google::jwt_verify::getStatusString(status));
     return;
   }
 
