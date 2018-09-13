@@ -147,6 +147,7 @@ BORINGSSL_MAKE_DELETER(EC_KEY, EC_KEY_free)
 BORINGSSL_MAKE_DELETER(RSA, RSA_free)
 BORINGSSL_MAKE_DELETER(BIGNUM, BN_free)
 BORINGSSL_MAKE_DELETER(EVP_MD_CTX, EVP_MD_CTX_free)
+BORINGSSL_MAKE_DELETER(ECDSA_SIG, ECDSA_SIG_free)
 }  // namespace bssl
 
 // Define begin() and end() for stack types so C++ range for loops work.
