@@ -59,7 +59,7 @@ std::cerr << "!!!!!!!!!!!!!!!!!! rsa_free \n";
 
 void bssl::bn_free(BIGNUM *a){
 std::cerr << "!!!!!!!!!!!!!!!!!! bn_free \n";
-  BN_free(a);
+//  BN_free(a);
 }
 
 void bssl::evp_md_ctx_free(EVP_MD_CTX *a){
