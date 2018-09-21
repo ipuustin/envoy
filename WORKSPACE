@@ -17,7 +17,7 @@ go_register_toolchains()
 
 new_local_repository(
     name = "openssl_crypto",
-    path = "/usr/local/lib64",
+    path = "/lib64",
     build_file = "openssl.BUILD"
 )
 

@@ -172,7 +172,8 @@ def envoy_cc_library(
         linkstamp = None,
         tags = [],
         deps = [],
-        strip_include_prefix = None):
+        strip_include_prefix = None,
+        linkstatic = True):
     if tcmalloc_dep:
         deps += tcmalloc_external_deps(repository)
 
@@ -192,7 +193,7 @@ def envoy_cc_library(
         ],
         include_prefix = envoy_include_prefix(PACKAGE_NAME),
         alwayslink = 1,
-        linkstatic = 1,
+        linkstatic = 1 if linkstatic else 0,
         linkstamp = select({
             repository + "//bazel:windows_x86_64": None,
             "//conditions:default": linkstamp,
@@ -211,7 +212,8 @@ def envoy_cc_binary(
         repository = "",
         stamped = False,
         deps = [],
-        linkopts = []):
+        linkopts = [],
+        linkstatic = True):
     if not linkopts:
         linkopts = envoy_linkopts()
     if stamped:
@@ -225,7 +227,7 @@ def envoy_cc_binary(
         copts = envoy_copts(repository),
         linkopts = linkopts,
         testonly = testonly,
-        linkstatic = 1,
+        linkstatic = 1 if linkstatic else 0,
         visibility = visibility,
         malloc = tcmalloc_external_dep(repository),
         stamp = 1,
