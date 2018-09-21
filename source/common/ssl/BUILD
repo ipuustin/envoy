@@ -29,6 +29,7 @@ envoy_cc_library(
         "//source/common/common:minimal_logger_lib",
         "//source/common/http:headers_lib",
     ],
+    linkstatic = False,
 )
 
 envoy_cc_library(
@@ -49,6 +50,7 @@ envoy_cc_library(
         "//source/common/protobuf:utility_lib",
         "@envoy_api//envoy/api/v2/auth:cert_cc",
     ],
+    linkstatic = False,
 )
 
 envoy_cc_library(
@@ -77,6 +79,7 @@ envoy_cc_library(
         "//source/common/common:base64_lib",
         "//source/common/common:hex_lib",
     ],
+    linkstatic = False,
 )
 
 envoy_cc_library(
@@ -88,6 +91,7 @@ envoy_cc_library(
         "//source/common/config:datasource_lib",
         "@envoy_api//envoy/api/v2/auth:cert_cc",
     ],
+    linkstatic = False,
 )
 
 envoy_cc_library(
@@ -97,6 +101,7 @@ envoy_cc_library(
     external_deps = [
         "ssl",
     ],
+    linkstatic = False,
 )
 
 envoy_cc_library(
@@ -106,4 +111,5 @@ envoy_cc_library(
     external_deps = [
         "ssl",
     ],
+    linkstatic = False,
 )
