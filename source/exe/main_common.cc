@@ -22,6 +22,7 @@
 #endif
 
 #include "ares.h"
+#include "openssl/ssl.h"
 
 namespace Envoy {
 
@@ -41,6 +42,7 @@ Runtime::LoaderPtr ProdComponentFactory::createRuntime(Server::Instance& server,
 MainCommonBase::MainCommonBase(OptionsImpl& options) : options_(options) {
   ares_library_init(ARES_LIB_INIT_ALL);
   Event::Libevent::Global::initialize();
+  OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CONFIG, NULL);
   RELEASE_ASSERT(Envoy::Server::validateProtoDescriptors(), "");
 
   switch (options_.mode()) {
