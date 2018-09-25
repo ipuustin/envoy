@@ -21,6 +21,7 @@ class SslSocket : public Network::TransportSocket,
                   protected Logger::Loggable<Logger::Id::connection> {
 public:
   SslSocket(ContextSharedPtr ctx, InitialState state);
+  ~SslSocket();
 
   // Ssl::Connection
   bool peerCertificatePresented() const override;
@@ -51,6 +52,7 @@ private:
   Network::PostIoAction doHandshake();
   void drainErrorQueue();
   void shutdownSsl();
+  void asyncCb(int fd);
 
   // TODO: Move helper functions to the `Ssl::Utility` namespace.
   std::string getUriSanFromCertificate(X509* cert) const;
@@ -61,6 +63,7 @@ private:
   ContextImplSharedPtr ctx_;
   bssl::UniquePtr<SSL> ssl_;
   bool handshake_complete_{};
+  bool handshake_in_progress_{};
   bool shutdown_sent_{};
   uint64_t bytes_to_retry_{};
   mutable std::string cached_sha_256_peer_certificate_digest_;
