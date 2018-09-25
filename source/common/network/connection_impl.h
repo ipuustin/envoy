@@ -112,6 +112,17 @@ public:
   // Reconsider how to make fairness happen.
   void setReadBufferReady() override { file_event_->activate(Event::FileReadyType::Read); }
 
+  void registerFdReadyCallback(int fd, std::function<void(int)> cb) override {
+    ssl_async_event_ = dispatcher_.createFileEvent(
+      fd, [this, cb, fd](uint32_t events) -> void {
+        cb(fd);
+      }, Event::FileTriggerType::Edge, Event::FileReadyType::Read);
+  }
+
+  void disableFdReadyCallback(std::function<void(int)> cb) override {
+    ssl_async_event_->setEnabled(0);
+  }
+
   // Obtain global next connection ID. This should only be used in tests.
   static uint64_t nextGlobalIdForTest() { return next_global_id_; }
 
@@ -135,6 +146,7 @@ protected:
   ConnectionEvent immediate_error_event_{ConnectionEvent::Connected};
   bool bind_error_{false};
   Event::FileEventPtr file_event_;
+  Event::FileEventPtr ssl_async_event_;
 
 private:
   void onFileEvent(uint32_t events);

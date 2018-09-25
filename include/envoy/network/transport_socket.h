@@ -17,7 +17,9 @@ enum class PostIoAction {
   // Close the connection.
   Close,
   // Keep the connection open.
-  KeepOpen
+  KeepOpen,
+  // Wait for the connection to complete asynchronously.
+  Wait,
 };
 
 /**
@@ -73,6 +75,9 @@ public:
    * @param event supplies the connection event
    */
   virtual void raiseEvent(ConnectionEvent event) PURE;
+
+  virtual void registerFdReadyCallback(int fd, std::function<void(int)>) PURE;
+  virtual void disableFdReadyCallback(std::function<void(int)>) PURE;
 };
 
 /**
