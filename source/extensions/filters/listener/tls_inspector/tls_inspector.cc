@@ -34,10 +34,10 @@ Config::Config(Stats::Scope& scope, uint32_t max_client_hello_size)
                                      max_client_hello_size_, size_t(TLS_MAX_CLIENT_HELLO)));
   }
 
-  SSL_CTX_set_options(ssl_ctx_, SSL_OP_NO_TICKET);
-  SSL_CTX_set_session_cache_mode(ssl_ctx_, SSL_SESS_CACHE_OFF);
+  SSL_CTX_set_options(ssl_ctx_.get(), SSL_OP_NO_TICKET);
+  SSL_CTX_set_session_cache_mode(ssl_ctx_.get(), SSL_SESS_CACHE_OFF);
 
-  SSL_CTX_set_cert_cb(ssl_ctx_, cert_cb, nullptr);
+  SSL_CTX_set_cert_cb(ssl_ctx_.get(), cert_cb, nullptr);
 
 //  SSL_CTX_set_select_certificate_cb(
 //      ssl_ctx_, [](const SSL_CLIENT_HELLO* client_hello) -> ssl_select_cert_result_t {
@@ -51,7 +51,7 @@ Config::Config(Stats::Scope& scope, uint32_t max_client_hello_size)
 //        return ssl_select_cert_success;
 //      });
 
-  SSL_CTX_set_tlsext_servername_callback(ssl_ctx_, tlsext_cb);
+  SSL_CTX_set_tlsext_servername_callback(ssl_ctx_.get(), tlsext_cb);
 
 //  SSL_CTX_set_tlsext_servername_callback(
 //      ssl_ctx_, [](SSL* ssl, int* out_alert, void*) -> int {
@@ -74,18 +74,20 @@ int Config::tlsext_cb(SSL *ssl, void *arg)
   return 1;
 }
 
-SSL* Config::newSsl() { return SSL_new(ssl_ctx_); }
+bssl::UniquePtr<SSL> Config::newSsl() { return bssl::UniquePtr<SSL>{SSL_new(ssl_ctx_.get())}; }
 
 thread_local uint8_t Filter::buf_[Config::TLS_MAX_CLIENT_HELLO];
 
 Filter::Filter(const ConfigSharedPtr config) : config_(config), ssl_(config_->newSsl()) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! Filter \n";
   RELEASE_ASSERT(sizeof(buf_) >= config_->maxClientHelloSize(), "");
 
-  SSL_set_app_data(ssl_, this);
-  SSL_set_accept_state(ssl_);
+  SSL_set_app_data(ssl_.get(), this);
+  SSL_set_accept_state(ssl_.get());
 }
 
 Network::FilterStatus Filter::onAccept(Network::ListenerFilterCallbacks& cb) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onAccept \n";
   ENVOY_LOG(debug, "tls inspector: new connection accepted");
   Network::ConnectionSocket& socket = cb.socket();
   ASSERT(file_event_ == nullptr);
@@ -116,6 +118,7 @@ Network::FilterStatus Filter::onAccept(Network::ListenerFilterCallbacks& cb) {
 }
 
 void Filter::onALPN(const unsigned char* data, unsigned int len) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onALPN \n";
 //  CBS wire, list;
 //  CBS_init(&wire, reinterpret_cast<const uint8_t*>(data), static_cast<size_t>(len));
 //  if (!CBS_get_u16_length_prefixed(&wire, &list) || CBS_len(&wire) != 0 || CBS_len(&list) < 2) {
@@ -136,6 +139,7 @@ void Filter::onALPN(const unsigned char* data, unsigned int len) {
 }
 
 void Filter::onServername(absl::string_view name) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onServername \n";
   if (!name.empty()) {
     config_->stats().sni_found_.inc();
     cb_->socket().setRequestedServerName(name);
@@ -146,6 +150,7 @@ void Filter::onServername(absl::string_view name) {
 }
 
 void Filter::onRead() {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onRead \n";
   // This receive code is somewhat complicated, because it must be done as a MSG_PEEK because
   // there is no way for a listener-filter to pass payload data to the ConnectionImpl and filters
   // that get created later.
@@ -188,6 +193,7 @@ void Filter::onTimeout() {
 }
 
 void Filter::done(bool success) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! Filter::done \n";
   ENVOY_LOG(trace, "tls inspector: done: {}", success);
   timer_.reset();
   file_event_.reset();
@@ -195,21 +201,22 @@ void Filter::done(bool success) {
 }
 
 void Filter::parseClientHello(const void* data, size_t len) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!! parseClientHello \n";
+
   // Ownership is passed to ssl_ in SSL_set_bio()
-  BIO* bio(BIO_new_mem_buf(data, len));
+  bssl::UniquePtr<BIO> bio(BIO_new_mem_buf(data, len));
 
   // Make the mem-BIO return that there is more data
   // available beyond it's end
-  BIO_set_mem_eof_return(bio, -1);
+  BIO_set_mem_eof_return(bio.get(), -1);
 
-  SSL_set_bio(ssl_, bio, bio);
-  BIO_free(bio);
+  SSL_set_bio(ssl_.get(), bio.get(), bio.get());
 
-  int ret = SSL_do_handshake(ssl_);
+  int ret = SSL_do_handshake(ssl_.get());
 
   // This should never succeed because an error is always returned from the SNI callback.
   ASSERT(ret <= 0);
-  switch (SSL_get_error(ssl_, ret)) {
+  switch (SSL_get_error(ssl_.get(), ret)) {
   case SSL_ERROR_WANT_READ:
     if (read_ == config_->maxClientHelloSize()) {
       // We've hit the specified size limit. This is an unreasonably large ClientHello;

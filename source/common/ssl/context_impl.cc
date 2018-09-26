@@ -34,7 +34,7 @@ int ContextImpl::sslContextIndex() {
 ContextImpl::ContextImpl(Stats::Scope& scope, const ContextConfig& config)
     : ctx_(SSL_CTX_new(TLS_method())), scope_(scope), stats_(generateStats(scope)) {
   RELEASE_ASSERT(ctx_, "");
-
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ContextImpl " << config.minProtocolVersion() << " " << config.maxProtocolVersion() << " \n";
   int rc = SSL_CTX_set_ex_data(ctx_.get(), sslContextIndex(), this);
   RELEASE_ASSERT(rc == 1, "");
 
@@ -247,6 +247,7 @@ ContextImpl::ContextImpl(Stats::Scope& scope, const ContextConfig& config)
 
 int ServerContextImpl::alpnSelectCallback(const unsigned char** out, unsigned char* outlen,
                                           const unsigned char* in, unsigned int inlen) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! alpnSelectCallback \n";
   // Currently this uses the standard selection algorithm in priority order.
   const uint8_t* alpn_data = &parsed_alpn_protocols_[0];
   size_t alpn_data_size = parsed_alpn_protocols_.size();
@@ -265,6 +266,7 @@ int ServerContextImpl::alpnSelectCallback(const unsigned char** out, unsigned ch
 }
 
 std::vector<uint8_t> ContextImpl::parseAlpnProtocols(const std::string& alpn_protocols) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! parseAlpnProtocols \n";
   if (alpn_protocols.empty()) {
     return {};
   }
@@ -292,10 +294,12 @@ std::vector<uint8_t> ContextImpl::parseAlpnProtocols(const std::string& alpn_pro
 }
 
 bssl::UniquePtr<SSL> ContextImpl::newSsl() const {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! newSsl \n";
   return bssl::UniquePtr<SSL>(SSL_new(ctx_.get()));
 }
 
 int ContextImpl::ignoreCertificateExpirationCallback(int ok, X509_STORE_CTX* ctx) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! IgnoreCertificateExpirationCallback \n";
   if (!ok) {
     int err = X509_STORE_CTX_get_error(ctx);
     if (err == X509_V_ERR_CERT_HAS_EXPIRED || err == X509_V_ERR_CERT_NOT_YET_VALID) {
@@ -307,6 +311,7 @@ int ContextImpl::ignoreCertificateExpirationCallback(int ok, X509_STORE_CTX* ctx
 }
 
 int ContextImpl::verifyCallback(X509_STORE_CTX* store_ctx, void* arg) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! verifyCallback \n";
   ContextImpl* impl = reinterpret_cast<ContextImpl*>(arg);
 
   if (impl->verify_trusted_ca_) {
@@ -327,6 +332,7 @@ int ContextImpl::verifyCallback(X509_STORE_CTX* store_ctx, void* arg) {
 }
 
 int ContextImpl::verifyCertificate(X509* cert) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! verifyCertificate \n";
 
   if (!verify_subject_alt_name_list_.empty() &&
       !verifySubjectAltName(cert, verify_subject_alt_name_list_)) {
@@ -352,6 +358,7 @@ int ContextImpl::verifyCertificate(X509* cert) {
 }
 
 void ContextImpl::logHandshake(SSL* ssl) const {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! logHandshake \n";
   stats_.handshake_.inc();
 
   if (SSL_session_reused(ssl)) {
@@ -369,6 +376,7 @@ void ContextImpl::logHandshake(SSL* ssl) const {
 
 bool ContextImpl::verifySubjectAltName(X509* cert,
                                        const std::vector<std::string>& subject_alt_names) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! verifySubjectAltName \n";
   bssl::UniquePtr<GENERAL_NAMES> san_names(
       static_cast<GENERAL_NAMES*>(X509_get_ext_d2i(cert, NID_subject_alt_name, nullptr, nullptr)));
   if (san_names == nullptr) {
@@ -397,6 +405,7 @@ bool ContextImpl::verifySubjectAltName(X509* cert,
 }
 
 bool ContextImpl::dNSNameMatch(const std::string& dNSName, const char* pattern) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! dNSNameMatch \n";
   if (dNSName == pattern) {
     return true;
   }
@@ -414,6 +423,7 @@ bool ContextImpl::dNSNameMatch(const std::string& dNSName, const char* pattern) 
 
 bool ContextImpl::verifyCertificateHashList(
     X509* cert, const std::vector<std::vector<uint8_t>>& expected_hashes) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! verifyCertificateHashList \n";
   std::vector<uint8_t> computed_hash(SHA256_DIGEST_LENGTH);
   unsigned int n;
   X509_digest(cert, EVP_sha256(), computed_hash.data(), &n);
@@ -429,6 +439,7 @@ bool ContextImpl::verifyCertificateHashList(
 
 bool ContextImpl::verifyCertificateSpkiList(
     X509* cert, const std::vector<std::vector<uint8_t>>& expected_hashes) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! verifyCertificateSpkiList \n";
   X509_PUBKEY* pubkey = X509_get_X509_PUBKEY(cert);
   if (pubkey == nullptr) {
     return false;
@@ -452,6 +463,7 @@ bool ContextImpl::verifyCertificateSpkiList(
 }
 
 SslStats ContextImpl::generateStats(Stats::Scope& store) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! generateStats \n";
   std::string prefix("ssl.");
   return {ALL_SSL_STATS(POOL_COUNTER_PREFIX(store, prefix), POOL_GAUGE_PREFIX(store, prefix),
                         POOL_HISTOGRAM_PREFIX(store, prefix))};
@@ -479,6 +491,7 @@ int32_t ContextImpl::getDaysUntilExpiration(const X509* cert) const {
 }
 
 std::string ContextImpl::getCaCertInformation() const {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! getCaCertInformation \n";
   if (ca_cert_ == nullptr) {
     return "";
   }
@@ -488,6 +501,7 @@ std::string ContextImpl::getCaCertInformation() const {
 }
 
 std::string ContextImpl::getCertChainInformation() const {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! getCertChainInformation \n";
   if (cert_chain_ == nullptr) {
     return "";
   }
@@ -500,6 +514,7 @@ std::string ContextImpl::getCertChainInformation() const {
 ClientContextImpl::ClientContextImpl(Stats::Scope& scope, const ClientContextConfig& config)
     : ContextImpl(scope, config), server_name_indication_(config.serverNameIndication()),
       allow_renegotiation_(config.allowRenegotiation()) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ClientContextImpl \n";
   if (!parsed_alpn_protocols_.empty()) {
     int rc = SSL_CTX_set_alpn_protos(ctx_.get(), &parsed_alpn_protocols_[0],
                                      parsed_alpn_protocols_.size());
@@ -508,6 +523,7 @@ ClientContextImpl::ClientContextImpl(Stats::Scope& scope, const ClientContextCon
 }
 
 bssl::UniquePtr<SSL> ClientContextImpl::newSsl() const {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ClientContextImpl::newSsl \n";
   bssl::UniquePtr<SSL> ssl_con(ContextImpl::newSsl());
 
   if (!server_name_indication_.empty()) {
@@ -528,10 +544,12 @@ ServerContextImpl::ServerContextImpl(Stats::Scope& scope, const ServerContextCon
                                      Runtime::Loader& runtime)
     : ContextImpl(scope, config), runtime_(runtime),
       session_ticket_keys_(config.sessionTicketKeys()) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ServerContextImpl \n";
 
   if (config.certChain().empty()) {
     throw EnvoyException("Server TlsCertificates must have a certificate specified");
   }
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ServerContextImpl 1 \n";
   if (!config.caCert().empty()) {
     bssl::UniquePtr<BIO> bio(
         BIO_new_mem_buf(const_cast<char*>(config.caCert().data()), config.caCert().size()));
@@ -578,7 +596,7 @@ ServerContextImpl::ServerContextImpl(Stats::Scope& scope, const ServerContextCon
       SSL_CTX_set_verify(ctx_.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nullptr);
     }
   }
-
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ServerContextImpl 2 \n";
   parsed_alt_alpn_protocols_ = parseAlpnProtocols(config.altAlpnProtocols());
 
   if (!parsed_alpn_protocols_.empty()) {
@@ -590,13 +608,13 @@ ServerContextImpl::ServerContextImpl(Stats::Scope& scope, const ServerContextCon
                                },
                                this);
   }
-
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ServerContextImpl 3 \n";
   if (!session_ticket_keys_.empty()) {
     SSL_CTX_set_tlsext_ticket_key_cb(
         ctx_.get(),
         &ServerContextImpl::ssl_tlsext_ticket_key_cb);
   }
-
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ServerContextImpl 4 \n";
   uint8_t session_context_buf[EVP_MAX_MD_SIZE] = {};
   unsigned session_context_len = 0;
   EVP_MD_CTX *md(EVP_MD_CTX_new());
@@ -635,7 +653,7 @@ ServerContextImpl::ServerContextImpl(Stats::Scope& scope, const ServerContextCon
     // Make sure that we have either CommonName or SANs.
     RELEASE_ASSERT(cn_index >= 0, "");
   }
-
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ServerContextImpl 5 \n";
   X509_NAME* cert_issuer_name = X509_get_issuer_name(cert);
   rc = X509_NAME_digest(cert_issuer_name, EVP_sha256(), session_context_buf, &session_context_len);
   RELEASE_ASSERT(rc == 1 && session_context_len == SHA256_DIGEST_LENGTH, "");
@@ -658,7 +676,7 @@ ServerContextImpl::ServerContextImpl(Stats::Scope& scope, const ServerContextCon
       RELEASE_ASSERT(rc == 1, "");
     }
   }
-
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ServerContextImpl 6 \n";
   for (const auto& hash : verify_certificate_hash_list_) {
     rc = EVP_DigestUpdate(md, hash.data(),
                           hash.size() *
@@ -672,24 +690,27 @@ ServerContextImpl::ServerContextImpl(Stats::Scope& scope, const ServerContextCon
                               sizeof(std::remove_reference<decltype(hash)>::type::value_type));
     RELEASE_ASSERT(rc == 1, "");
   }
-
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ServerContextImpl 7 \n";
   // Hash configured SNIs for this context, so that sessions cannot be resumed across different
   // filter chains, even when using the same server certificate.
   for (const auto& name : server_names) {
     rc = EVP_DigestUpdate(md, name.data(), name.size());
     RELEASE_ASSERT(rc == 1, "");
   }
-
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ServerContextImpl 8 \n";
   rc = EVP_DigestFinal(md, session_context_buf, &session_context_len);
   RELEASE_ASSERT(rc == 1, "");
   rc = SSL_CTX_set_session_id_context(ctx_.get(), session_context_buf, session_context_len);
   RELEASE_ASSERT(rc == 1, "");
 
   EVP_MD_CTX_free(md);
+
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ServerContextImpl done \n";
 }
 
 int ServerContextImpl::ssl_tlsext_ticket_key_cb(SSL *ssl, unsigned char key_name[16], unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hmac_ctx, int encrypt)
 {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ssl_tlsext_ticket_key_cb \n";
   ContextImpl* context_impl = static_cast<ContextImpl*>(SSL_CTX_get_ex_data(SSL_get_SSL_CTX(ssl), sslContextIndex()));
   ServerContextImpl* server_context_impl = dynamic_cast<ServerContextImpl*>(context_impl);
   RELEASE_ASSERT(server_context_impl != nullptr, ""); // for Coverity
@@ -698,6 +719,7 @@ int ServerContextImpl::ssl_tlsext_ticket_key_cb(SSL *ssl, unsigned char key_name
 
 int ServerContextImpl::sessionTicketProcess(SSL*, uint8_t* key_name, uint8_t* iv,
                                             EVP_CIPHER_CTX* ctx, HMAC_CTX* hmac_ctx, int encrypt) {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!! sessionTicketProcess \n";
   const EVP_MD* hmac = EVP_sha256();
   const EVP_CIPHER* cipher = EVP_aes_256_cbc();
 

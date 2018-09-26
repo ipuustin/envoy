@@ -6,6 +6,7 @@
 #include "envoy/stats/stats_macros.h"
 
 #include "common/common/logger.h"
+#include "common/ssl/bssl_wrapper.h"
 
 //#include "openssl/bytestring.h"
 #include "openssl/ssl.h"
@@ -45,7 +46,7 @@ public:
   Config(Stats::Scope& scope, uint32_t max_client_hello_size = TLS_MAX_CLIENT_HELLO);
 
   const TlsInspectorStats& stats() const { return stats_; }
-  SSL* newSsl();
+  bssl::UniquePtr<SSL> newSsl();
   uint32_t maxClientHelloSize() const { return max_client_hello_size_; }
 
   static constexpr size_t TLS_MAX_CLIENT_HELLO = 64 * 1024;
@@ -56,7 +57,7 @@ protected:
 
 private:
   TlsInspectorStats stats_;
-  SSL_CTX* ssl_ctx_ = NULL;
+  bssl::UniquePtr<SSL_CTX> ssl_ctx_;
   const uint32_t max_client_hello_size_;
 };
 
@@ -85,7 +86,7 @@ private:
   Event::FileEventPtr file_event_;
   Event::TimerPtr timer_;
 
-  SSL* ssl_ = NULL;
+  bssl::UniquePtr<SSL> ssl_;
   uint64_t read_{0};
   bool alpn_found_{false};
   bool clienthello_success_{false};
