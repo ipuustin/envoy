@@ -53,6 +53,13 @@ public:
 
 protected:
   static int cert_cb(SSL *ssl, void *arg);
+  static int client_cert_cb(SSL *ssl, X509 **x509, EVP_PKEY **pkey);
+  static int alpn_cb(SSL *ssl,
+                   const unsigned char **out,
+                   unsigned char *outlen,
+                   const unsigned char *in,
+                   unsigned int inlen,
+                   void *arg);
   static int tlsext_cb(SSL *ssl, void *arg);
 
 private:

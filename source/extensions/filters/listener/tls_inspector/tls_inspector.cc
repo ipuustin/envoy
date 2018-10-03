@@ -28,6 +28,7 @@ Config::Config(Stats::Scope& scope, uint32_t max_client_hello_size)
     : stats_{ALL_TLS_INSPECTOR_STATS(POOL_COUNTER_PREFIX(scope, "tls_inspector."))},
       ssl_ctx_(SSL_CTX_new(TLS_method())),
       max_client_hello_size_(max_client_hello_size) {
+std::cerr << "!!!!!!!!!!!!!!!!! Config::Config \n";
 
   if (max_client_hello_size_ > TLS_MAX_CLIENT_HELLO) {
     throw EnvoyException(fmt::format("max_client_hello_size of {} is greater than maximum of {}.",
@@ -38,6 +39,9 @@ Config::Config(Stats::Scope& scope, uint32_t max_client_hello_size)
   SSL_CTX_set_session_cache_mode(ssl_ctx_.get(), SSL_SESS_CACHE_OFF);
 
   SSL_CTX_set_cert_cb(ssl_ctx_.get(), cert_cb, nullptr);
+  SSL_CTX_set_client_cert_cb(ssl_ctx_.get(), client_cert_cb);
+  SSL_CTX_set_alpn_select_cb(ssl_ctx_.get(), alpn_cb, nullptr);
+
 
 //  SSL_CTX_set_select_certificate_cb(
 //      ssl_ctx_, [](const SSL_CLIENT_HELLO* client_hello) -> ssl_select_cert_result_t {
@@ -62,19 +66,66 @@ Config::Config(Stats::Scope& scope, uint32_t max_client_hello_size)
 //        *out_alert = SSL_AD_USER_CANCELLED;
 //        return SSL_TLSEXT_ERR_ALERT_FATAL;
 //      });
+
+std::cerr << "!!!!!!!!!!!!!!!!! Config::Config done \n";
 }
+
+int Config::alpn_cb(SSL *ssl,
+                   const unsigned char **out,
+                   unsigned char *outlen,
+                   const unsigned char *in,
+                   unsigned int inlen,
+                   void *arg)
+{
+std::cerr << "!!!!!!!!!!!!!!!!! alpn_cb \n";
+  const uint8_t* data;
+  size_t len;
+  //if (SSL_early_callback_ctx_extension_get(client_hello, TLSEXT_TYPE_application_layer_protocol_negotiation, &data, &len)) {
+    Filter* filter = static_cast<Filter*>(SSL_get_app_data(ssl));
+    filter->onALPN(data, len);
+  //}
+  return 1;
+}
+
+int Config::client_cert_cb(SSL *ssl, X509 **x509, EVP_PKEY **pkey)
+{
+std::cerr << "!!!!!!!!!!!!!!!!! client_cert_cb \n";
+  return 1;
+}
+
 
 int Config::cert_cb(SSL *ssl, void *arg)
 {
+std::cerr << "!!!!!!!!!!!!!!!!! cert_cb \n";
+  const unsigned char* data;
+  unsigned int len;
+  //if (SSL_early_callback_ctx_extension_get(client_hello, TLSEXT_TYPE_application_layer_protocol_negotiation, &data, &len)) {
+    //SSL_get0_alpn_selected(ssl, &data, &len);
+    Filter* filter = static_cast<Filter*>(SSL_get_app_data(ssl));
+    filter->onALPN(data, len);
+  //}
+
   return 1;
 }
 
 int Config::tlsext_cb(SSL *ssl, void *arg)
 {
-  return 1;
+  std::cerr << "!!!!!!!!!!!!!!!!! tlsext_cb \n";
+  Filter* filter = static_cast<Filter*>(SSL_get_app_data(ssl));
+  absl::string_view servername = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
+std::cerr << "!!!!!!!!!!!!!!!!!! tlsext_cb servername '" << servername << "' " << servername.empty() << " \n";
+  filter->onServername(servername);
+  if (servername.empty()){
+    return 1;
+  } else {
+    return SSL_TLSEXT_ERR_ALERT_FATAL;
+  } 
 }
 
-bssl::UniquePtr<SSL> Config::newSsl() { return bssl::UniquePtr<SSL>{SSL_new(ssl_ctx_.get())}; }
+bssl::UniquePtr<SSL> Config::newSsl() {
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! Config::newSsl \n";
+  return bssl::UniquePtr<SSL>{SSL_new(ssl_ctx_.get())};
+}
 
 thread_local uint8_t Filter::buf_[Config::TLS_MAX_CLIENT_HELLO];
 
@@ -118,7 +169,7 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onAccept \n";
 }
 
 void Filter::onALPN(const unsigned char* data, unsigned int len) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onALPN \n";
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onALPN " << data << " \n";
 //  CBS wire, list;
 //  CBS_init(&wire, reinterpret_cast<const uint8_t*>(data), static_cast<size_t>(len));
 //  if (!CBS_get_u16_length_prefixed(&wire, &list) || CBS_len(&wire) != 0 || CBS_len(&list) < 2) {
@@ -126,7 +177,9 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onALPN \n";
 //    return;
 //  }
 //  CBS name;
-//  std::vector<absl::string_view> protocols;
+  //std::vector<absl::string_view> protocols;
+std::vector<absl::string_view> protocols = {absl::string_view("h2"),
+                                                      absl::string_view("http/1.1")};
 //  while (CBS_len(&list) > 0) {
 //    if (!CBS_get_u8_length_prefixed(&list, &name) || CBS_len(&name) == 0) {
       // Don't produce errors, let the real TLS stack do it.
@@ -134,12 +187,13 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onALPN \n";
 //    }
 //    protocols.emplace_back(reinterpret_cast<const char*>(CBS_data(&name)), CBS_len(&name));
 //  }
-//  cb_->socket().setRequestedApplicationProtocols(protocols);
-//  alpn_found_ = true;
+//protocols.emplace_back(reinterpret_cast<const char*>("\x02h2\x08http/1.1"), 12);
+  cb_->socket().setRequestedApplicationProtocols(protocols);
+  alpn_found_ = true;
 }
 
 void Filter::onServername(absl::string_view name) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onServername \n";
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onServername '" << name << "' \n";
   if (!name.empty()) {
     config_->stats().sni_found_.inc();
     cb_->socket().setRequestedServerName(name);
@@ -211,6 +265,7 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!! parseClientHello \n";
   BIO_set_mem_eof_return(bio.get(), -1);
 
   SSL_set_bio(ssl_.get(), bio.get(), bio.get());
+  bio.release();
 
   int ret = SSL_do_handshake(ssl_.get());
 
@@ -218,6 +273,7 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!! parseClientHello \n";
   ASSERT(ret <= 0);
   switch (SSL_get_error(ssl_.get(), ret)) {
   case SSL_ERROR_WANT_READ:
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!! parseClientHello SSL_ERROR_WANT_READ\n";
     if (read_ == config_->maxClientHelloSize()) {
       // We've hit the specified size limit. This is an unreasonably large ClientHello;
       // indicate failure.
@@ -226,6 +282,7 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!! parseClientHello \n";
     }
     break;
   case SSL_ERROR_SSL:
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!! parseClientHello SSL_ERROR_SSL " << clienthello_success_ << " " << alpn_found_ << " \n";
     if (clienthello_success_) {
       config_->stats().tls_found_.inc();
       if (alpn_found_) {

@@ -93,6 +93,7 @@ TEST_F(TlsInspectorTest, ReadError) {
 
 // Test that a ClientHello with an SNI value causes the correct name notification.
 TEST_F(TlsInspectorTest, SniRegistered) {
+std::cerr << "************************* SniRegistered init \n";
   init();
   const std::string servername("example.com");
   std::vector<uint8_t> client_hello = Tls::Test::generateClientHello(servername, "");
@@ -114,16 +115,20 @@ TEST_F(TlsInspectorTest, SniRegistered) {
 
 // Test that a ClientHello with an ALPN value causes the correct name notification.
 TEST_F(TlsInspectorTest, AlpnRegistered) {
+std::cerr << "************************* AlpnRegistered init \n";
   init();
+std::cerr << "************************* alpn_protos \n";
   const std::vector<absl::string_view> alpn_protos = {absl::string_view("h2"),
                                                       absl::string_view("http/1.1")};
   std::vector<uint8_t> client_hello = Tls::Test::generateClientHello("", "\x02h2\x08http/1.1");
+std::cerr << "************************* done client_hello \n";
   EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
       .WillOnce(Invoke([&client_hello](int, void* buffer, size_t length, int) -> int {
         ASSERT(length >= client_hello.size());
         memcpy(buffer, client_hello.data(), client_hello.size());
         return client_hello.size();
       }));
+std::cerr << "************************* EXPECT_CALL 1 \n";
   EXPECT_CALL(socket_, setRequestedServerName(_)).Times(0);
   EXPECT_CALL(socket_, setRequestedApplicationProtocols(alpn_protos));
   EXPECT_CALL(socket_, setDetectedTransportProtocol(absl::string_view("tls")));
