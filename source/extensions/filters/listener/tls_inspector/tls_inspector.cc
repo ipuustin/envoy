@@ -35,13 +35,15 @@ std::cerr << "!!!!!!!!!!!!!!!!! Config::Config \n";
                                      max_client_hello_size_, size_t(TLS_MAX_CLIENT_HELLO)));
   }
 
-  SSL_CTX_set_options(ssl_ctx_.get(), SSL_OP_NO_TICKET);
+  //SSL_CTX_set_options(ssl_ctx_.get(), SSL_OP_NO_TICKET);
   SSL_CTX_set_session_cache_mode(ssl_ctx_.get(), SSL_SESS_CACHE_OFF);
 
-  SSL_CTX_set_cert_cb(ssl_ctx_.get(), cert_cb, nullptr);
-  SSL_CTX_set_client_cert_cb(ssl_ctx_.get(), client_cert_cb);
-  SSL_CTX_set_alpn_select_cb(ssl_ctx_.get(), alpn_cb, nullptr);
-
+  SSL_CTX_set_cert_cb(ssl_ctx_.get(), cert_cb, ssl_ctx_.get());
+  //SSL_CTX_set_client_cert_cb(ssl_ctx_.get(), client_cert_cb);
+  
+  SSL_CTX_set_tlsext_servername_callback(ssl_ctx_.get(), tlsext_servername_cb);
+  //SSL_CTX_set_alpn_select_cb(ssl_ctx_.get(), alpn_cb, nullptr);
+  //SSL_CTX_set_next_protos_advertised_cb(ssl_ctx_.get(), next_cb, nullptr);
 
 //  SSL_CTX_set_select_certificate_cb(
 //      ssl_ctx_, [](const SSL_CLIENT_HELLO* client_hello) -> ssl_select_cert_result_t {
@@ -55,8 +57,6 @@ std::cerr << "!!!!!!!!!!!!!!!!! Config::Config \n";
 //        return ssl_select_cert_success;
 //      });
 
-  SSL_CTX_set_tlsext_servername_callback(ssl_ctx_.get(), tlsext_cb);
-
 //  SSL_CTX_set_tlsext_servername_callback(
 //      ssl_ctx_, [](SSL* ssl, int* out_alert, void*) -> int {
 //        Filter* filter = static_cast<Filter*>(SSL_get_app_data(ssl));
@@ -68,6 +68,14 @@ std::cerr << "!!!!!!!!!!!!!!!!! Config::Config \n";
 //      });
 
 std::cerr << "!!!!!!!!!!!!!!!!! Config::Config done \n";
+}
+
+int Config::next_cb(SSL *ssl,
+              	const unsigned char **out,
+              	unsigned int *outlen,
+              	void *arg)
+{
+std::cerr << "!!!!!!!!!!!!!!!!! next_cb \n";
 }
 
 int Config::alpn_cb(SSL *ssl,
@@ -84,7 +92,7 @@ std::cerr << "!!!!!!!!!!!!!!!!! alpn_cb \n";
     Filter* filter = static_cast<Filter*>(SSL_get_app_data(ssl));
     filter->onALPN(data, len);
   //}
-  return 1;
+  return SSL_TLSEXT_ERR_OK;
 }
 
 int Config::client_cert_cb(SSL *ssl, X509 **x509, EVP_PKEY **pkey)
@@ -96,30 +104,81 @@ std::cerr << "!!!!!!!!!!!!!!!!! client_cert_cb \n";
 
 int Config::cert_cb(SSL *ssl, void *arg)
 {
-std::cerr << "!!!!!!!!!!!!!!!!! cert_cb \n";
+std::cerr << "!!!!!!!!!!!!!!!!! cert_cb " << ssl << " \n";
   const unsigned char* data;
   unsigned int len;
+  size_t size;
   //if (SSL_early_callback_ctx_extension_get(client_hello, TLSEXT_TYPE_application_layer_protocol_negotiation, &data, &len)) {
-    //SSL_get0_alpn_selected(ssl, &data, &len);
+    //SSL_get0_next_proto_negotiated(ssl, &data, &len);
+//std::cerr << "!!!!!!!!!!!!!!!!! SSL_get0_next_proto_negotiated " << len << " \n";
+    SSL_get0_alpn_selected(ssl, &data, &len);
+std::cerr << "!!!!!!!!!!!!!!!!! SSL_get0_alpn_selected " << len << " \n";
+int rc = SSL_extension_supported(TLSEXT_TYPE_application_layer_protocol_negotiation);
+std::cerr << "*************** TLSEXT_TYPE_application_layer_protocol_negotiation " << rc << " \n";
+
+
+//SSL_SESSION *session = SSL_get_session(ssl);
+//std::cerr << "!!!!!!!!!!!!!!!!!! SSL_get_session " << session << " \n";
+
+//SSL_SESSION_get0_alpn_selected(session, &data, &size);
+//std::cerr << "!!!!!!!!!!!!!!!!! SSL_SESSION_get0_alpn_selected " << size << " \n";
+
+//unsigned char vector[] = { 
+//	2, 'h', '2',
+//	8, 'h', 't', 't', 'p', '/', '1', '.', '1' 
+//};
+//rc = SSL_SESSION_set1_alpn_selected(session, vector, sizeof(vector));
+//std::cerr << "!!!!!!!!!!!!!!!!!! SSL_SESSION_set1_alpn_selected " << rc << " \n";
+
+//SSL_SESSION_get0_alpn_selected(session, &data, &size);
+//std::cerr << "!!!!!!!!!!!!!!!!! SSL_SESSION_get0_alpn_selected " << size << " \n";
+
+//SSL_get0_alpn_selected(ssl, &data, &len);
+//std::cerr << "!!!!!!!!!!!!!!!!! SSL_get0_alpn_selected " << len << " \n";
+
     Filter* filter = static_cast<Filter*>(SSL_get_app_data(ssl));
     filter->onALPN(data, len);
   //}
 
-  return 1;
+    //EVP_PKEY *pkey = EVP_PKEY_new();
+
+    //RSA *rsa = RSA_generate_key(2048, 3, NULL, NULL);
+    //EVP_PKEY_assign_RSA(pkey, rsa);
+
+  //SSL_use_PrivateKey(ssl, pkey);
+
+   //const char* const PREFERRED_CIPHERS = "HIGH:!aNULL:!kRSA:!PSK:!SRP:!MD5:!RC4";
+  //SSL_set_cipher_list(ssl, PREFERRED_CIPHERS);
+
+  //SSL_CTX* ssl_ctx = (SSL_CTX*)arg;
+
+  //X509_STORE *store = SSL_CTX_get_cert_store(ssl_ctx);
+//std::cerr << "!!!!!!!!!!!!!!!!! SSL_CTX_get_cert_store " << store << " \n";
+
+  //STACK_OF(X509_OBJECT) *x509_objects = X509_STORE_get0_objects(store);
+//std::cerr << "!!!!!!!!!!!!!!!!! STACK_OF(X509_OBJECT) " << sk_X509_OBJECT_num(x509_objects) << " \n";
+  //for (int i = 0; i < sk_X509_OBJECT_num(x509_objects); i++) {
+//std::cerr << "!!!!!!!!!!!!!!!!! X509_OBJECT " << i << " \n";
+ // }
+
+ // STACK_OF(X509) *peer_certs = SSL_get_peer_cert_chain(ssl);
+//std::cerr << "!!!!!!!!!!!!!!!!! peer " << sk_X509_num(peer_certs) << " \n";
+
+ // STACK_OF(X509) *verified = SSL_get0_verified_chain(ssl);
+//std::cerr << "!!!!!!!!!!!!!!!!! verified " << sk_X509_num(verified) << " \n";
+
+  return 0;
 }
 
-int Config::tlsext_cb(SSL *ssl, void *arg)
+int Config::tlsext_servername_cb(SSL *ssl, void *arg)
 {
-  std::cerr << "!!!!!!!!!!!!!!!!! tlsext_cb \n";
+  std::cerr << "!!!!!!!!!!!!!!!!! tlsext_servername_cb \n";
   Filter* filter = static_cast<Filter*>(SSL_get_app_data(ssl));
   absl::string_view servername = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
-std::cerr << "!!!!!!!!!!!!!!!!!! tlsext_cb servername '" << servername << "' " << servername.empty() << " \n";
+std::cerr << "!!!!!!!!!!!!!!!!!! tlsext_servername_cb servername '" << servername << "' " << servername.empty() << " \n";
   filter->onServername(servername);
-  if (servername.empty()){
-    return 1;
-  } else {
-    return SSL_TLSEXT_ERR_ALERT_FATAL;
-  } 
+
+  return SSL_TLSEXT_ERR_OK;
 }
 
 bssl::UniquePtr<SSL> Config::newSsl() {
@@ -165,31 +224,18 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onAccept \n";
   // so that it applies to all listener filters.
 
   cb_ = &cb;
+
+  std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onAccept done \n";
   return Network::FilterStatus::StopIteration;
 }
 
 void Filter::onALPN(const unsigned char* data, unsigned int len) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onALPN " << data << " \n";
-//  CBS wire, list;
-//  CBS_init(&wire, reinterpret_cast<const uint8_t*>(data), static_cast<size_t>(len));
-//  if (!CBS_get_u16_length_prefixed(&wire, &list) || CBS_len(&wire) != 0 || CBS_len(&list) < 2) {
-    // Don't produce errors, let the real TLS stack do it.
-//    return;
-//  }
-//  CBS name;
-  //std::vector<absl::string_view> protocols;
-std::vector<absl::string_view> protocols = {absl::string_view("h2"),
-                                                      absl::string_view("http/1.1")};
-//  while (CBS_len(&list) > 0) {
-//    if (!CBS_get_u8_length_prefixed(&list, &name) || CBS_len(&name) == 0) {
-      // Don't produce errors, let the real TLS stack do it.
-//      return;
-//    }
-//    protocols.emplace_back(reinterpret_cast<const char*>(CBS_data(&name)), CBS_len(&name));
-//  }
+std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!! onALPN \n";
+
+//std::vector<absl::string_view> protocols = {absl::string_view("h2"), absl::string_view("http/1.1")};
 //protocols.emplace_back(reinterpret_cast<const char*>("\x02h2\x08http/1.1"), 12);
-  cb_->socket().setRequestedApplicationProtocols(protocols);
-  alpn_found_ = true;
+//  cb_->socket().setRequestedApplicationProtocols(protocols);
+//  alpn_found_ = true;
 }
 
 void Filter::onServername(absl::string_view name) {
@@ -267,7 +313,12 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!! parseClientHello \n";
   SSL_set_bio(ssl_.get(), bio.get(), bio.get());
   bio.release();
 
+std::cerr << "!!!!!!!!!!!!!!! SSL_do_handshake server " << ssl_.get() << " \n";
   int ret = SSL_do_handshake(ssl_.get());
+std::cerr << "!!!!!!!!!!!!!!! SSL_do_handshake ret " << ret << " " << SSL_get_error(ssl_.get(), ret) << " \n";
+unsigned long l;
+    //while ((l = ERR_get_error()) != 0)
+//std::cerr << "!!!!!!!!!!!!!!! ERR_get_error " << ERR_GET_REASON(l) << " \n";
 
   // This should never succeed because an error is always returned from the SNI callback.
   ASSERT(ret <= 0);

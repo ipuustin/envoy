@@ -14,7 +14,7 @@ std::vector<uint8_t> generateClientHello(const std::string& sni_name, const std:
   bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
 
   const long flags = SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION;
-  SSL_CTX_set_options(ctx.get(), flags);
+  //SSL_CTX_set_options(ctx.get(), flags);
 
   bssl::UniquePtr<SSL> ssl(SSL_new(ctx.get()));
 
@@ -30,9 +30,53 @@ std::vector<uint8_t> generateClientHello(const std::string& sni_name, const std:
     SSL_set_tlsext_host_name(ssl.get(), sni_name.c_str());
   }
   if (!alpn.empty()) {
-    SSL_set_alpn_protos(ssl.get(), reinterpret_cast<const uint8_t*>(alpn.data()), alpn.size());
+//unsigned char vector[] = { 
+//	2, 'h', '2',
+//	8, 'h', 't', 't', 'p', '/', '1', '.', '1' 
+//};
+unsigned char vector[] = {
+     6, 's', 'p', 'd', 'y', '/', '1',
+     8, 'h', 't', 't', 'p', '/', '1', '.', '1'
+ };
+  const unsigned char* dat;
+  unsigned int vector_len = sizeof(vector);
+  unsigned int len;
+int rc;
+
+// rc = SSL_set_alpn_protos(ssl.get(), vector, vector_len);
+//std::cerr << "****************** SSL_set_alpn_protos vector rc " << rc << " " << vector_len << " \n";
+
+//SSL_get0_alpn_selected(ssl.get(), &dat, &len);
+//std::cerr << "**************** SSL_get0_alpn_selected " << len << " \n";
+
+//rc = SSL_CTX_set_alpn_protos(ctx.get(), vector, vector_len);
+//std::cerr << "****************** SSL_CTX_set_alpn_protos vector rc " << rc << " " << vector_len << " \n";
+
+//SSL_get0_alpn_selected(ssl.get(), &dat, &len);
+//std::cerr << "**************** SSL_get0_alpn_selected " << len << " \n";
+
+    rc = SSL_set_alpn_protos(ssl.get(), reinterpret_cast<const uint8_t*>(alpn.data()), alpn.size());
+std::cerr << "****************** SSL_set_alpn_protos rc " << rc << " " << alpn.size() << " " << alpn << " \n";
+
+SSL_get0_alpn_selected(ssl.get(), &dat, &len);
+std::cerr << "**************** SSL_get0_alpn_selected " << len << " \n";
+
+    rc = SSL_CTX_set_alpn_protos(ctx.get(), reinterpret_cast<const uint8_t*>(alpn.data()), alpn.size());
+std::cerr << "****************** SSL_CTX_set_alpn_protos rc " << rc << " " << alpn.size() << " " << alpn << " \n";
+
+SSL_get0_alpn_selected(ssl.get(), &dat, &len);
+std::cerr << "**************** SSL_get0_alpn_selected " << len << " \n";
+
+rc = SSL_extension_supported(TLSEXT_TYPE_application_layer_protocol_negotiation);
+std::cerr << "*************** TLSEXT_TYPE_application_layer_protocol_negotiation " << rc << " \n";
+
+SSL_SESSION *session = SSL_get_session(ssl.get());
+std::cerr << "**************** SSL_get_session " << session << " \n"; 
   }
+
+std::cerr << "**************** SSL_do_handshake client " << ssl.get() << " \n";
   SSL_do_handshake(ssl.get());
+
   const uint8_t* data = NULL;
   long data_len = BIO_get_mem_data(out, &data);
 

@@ -10,6 +10,7 @@
 
 //#include "openssl/bytestring.h"
 #include "openssl/ssl.h"
+#include <openssl/err.h>
 
 namespace Envoy {
 namespace Extensions {
@@ -60,7 +61,11 @@ protected:
                    const unsigned char *in,
                    unsigned int inlen,
                    void *arg);
-  static int tlsext_cb(SSL *ssl, void *arg);
+  static int next_cb(SSL *ssl,
+              	const unsigned char **out,
+              	unsigned int *outlen,
+              	void *arg);
+  static int tlsext_servername_cb(SSL *ssl, void *arg);
 
 private:
   TlsInspectorStats stats_;
