@@ -2330,15 +2330,15 @@ TEST_P(SslSocketTest, ProtocolVersions) {
   testUtilV2(listener, client, "", true, "", "", "", "", "", "ssl.handshake", 2, GetParam());
 
   // Connection using TLSv1.3 (client) and defaults (server) fails.
-  //client_params->set_tls_minimum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
-  //client_params->set_tls_maximum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
-  //testUtilV2(listener, client, "", false, "", "", "", "", "", "ssl.connection_error", 1, GetParam());
+  client_params->set_tls_minimum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
+  client_params->set_tls_maximum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
+  testUtilV2(listener, client, "", false, "", "", "", "", "", "ssl.connection_error", 1, GetParam());
 
   // Connection using TLSv1.3 (client) and TLSv1.0-1.3 (server) succeeds.
-  // ssl.handshake logged by both: client & server.
-  //server_params->set_tls_minimum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_0);
-  //server_params->set_tls_maximum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
-  //testUtilV2(listener, client, "", true, "TLSv1.3", "", "", "", "", "ssl.handshake", 2, GetParam());
+  //ssl.handshake logged by both: client & server.
+  server_params->set_tls_minimum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_0);
+  server_params->set_tls_maximum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
+  testUtilV2(listener, client, "", true, "TLSv1.3", "", "", "", "", "ssl.handshake", 2, GetParam());
 
   // Connection using defaults (client) and TLSv1.0 (server) succeeds.
   // ssl.handshake logged by both: client & server.
@@ -2361,16 +2361,16 @@ TEST_P(SslSocketTest, ProtocolVersions) {
   testUtilV2(listener, client, "", true, "TLSv1.2", "", "", "", "", "ssl.handshake", 2, GetParam());
 
   // Connection using defaults (client) and TLSv1.3 (server) fails.
-  //server_params->set_tls_minimum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
-  //server_params->set_tls_maximum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
-  //testUtilV2(listener, client, "", false, "", "", "", "", "", "ssl.connection_error", 1,
-  //           GetParam());
+  server_params->set_tls_minimum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
+  server_params->set_tls_maximum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
+  testUtilV2(listener, client, "", false, "", "", "", "", "", "ssl.connection_error", 1,
+             GetParam());
 
   // Connection using TLSv1.0-TLSv1.3 (client) and TLSv1.3 (server) succeeds.
   // ssl.handshake logged by both: client & server.
-  //client_params->set_tls_minimum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_0);
-  //client_params->set_tls_maximum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
-  //testUtilV2(listener, client, "", true, "TLSv1.3", "", "", "", "", "ssl.handshake", 2, GetParam());
+  client_params->set_tls_minimum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_0);
+  client_params->set_tls_maximum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
+  testUtilV2(listener, client, "", true, "TLSv1.3", "", "", "", "", "ssl.handshake", 2, GetParam());
 
 }
 
