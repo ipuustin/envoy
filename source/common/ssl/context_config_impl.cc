@@ -136,7 +136,7 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!! tlsVersionFromProto " << version << " " << en
   case envoy::api::v2::auth::TlsParameters::TLSv1_2:
     return TLS1_2_VERSION;
   case envoy::api::v2::auth::TlsParameters::TLSv1_3:
-    return TLS1_2_VERSION;
+    return TLS1_3_VERSION;
   default:
     NOT_IMPLEMENTED_GCOVR_EXCL_LINE;
   }
