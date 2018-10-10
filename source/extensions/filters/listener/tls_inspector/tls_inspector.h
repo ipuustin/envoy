@@ -50,9 +50,6 @@ public:
 
   static constexpr size_t TLS_MAX_CLIENT_HELLO = 64 * 1024;
 
-protected:
-  static int tlsext_servername_cb(SSL *ssl, void *arg);
-
 private:
   TlsInspectorStats stats_;
   bssl::UniquePtr<SSL_CTX> ssl_ctx_;
