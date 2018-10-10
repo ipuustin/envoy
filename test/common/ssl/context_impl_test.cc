@@ -298,7 +298,6 @@ TEST_F(SslServerContextImplTicketTest, TicketKeySdsFail) {
 }
 
 TEST_F(SslServerContextImplTicketTest, CRLSuccess) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!! CRLSuccess \n";
   std::string json = R"EOF(
   {
     "cert_chain_file": "{{ test_rundir }}/test/common/ssl/test_data/san_dns_cert.pem",
@@ -307,7 +306,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!! CRLSuccess \n";
     "crl_file": "{{ test_rundir }}/test/common/ssl/test_data/ca_cert.crl"
   }
   )EOF";
-std::cerr << "!!!!!!!!!!!!!!!!!!!! expect \n";
   EXPECT_NO_THROW(loadConfigJson(json));
 }
 

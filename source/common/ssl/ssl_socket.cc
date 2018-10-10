@@ -17,7 +17,6 @@ namespace Ssl {
 
 SslSocket::SslSocket(ContextSharedPtr ctx, InitialState state)
     : ctx_(std::dynamic_pointer_cast<ContextImpl>(ctx)), ssl_(ctx_->newSsl()) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! SslSocket \n";
   if (state == InitialState::Client) {
     SSL_set_connect_state(ssl_.get());
   } else {
@@ -27,7 +26,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! SslSocket \n";
 }
 
 void SslSocket::setTransportSocketCallbacks(Network::TransportSocketCallbacks& callbacks) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! setTransportSocketCallbacks \n";
   ASSERT(!callbacks_);
   callbacks_ = &callbacks;
 
@@ -36,7 +34,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! setTransportSocketCallbacks \n";
 }
 
 Network::IoResult SslSocket::doRead(Buffer::Instance& read_buffer) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! doRead \n";
   if (!handshake_complete_) {
     PostIoAction action = doHandshake();
     if (action == PostIoAction::Close || !handshake_complete_) {
@@ -97,12 +94,11 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! doRead \n";
 }
 
 PostIoAction SslSocket::doHandshake() {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! doHandshake \n";
+
   ASSERT(!handshake_complete_);
   int rc = SSL_do_handshake(ssl_.get());
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! doHandshake " << rc << " \n";
+
   if (rc == 1) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! handshake complete \n";
     ENVOY_CONN_LOG(debug, "handshake complete", callbacks_->connection());
     handshake_complete_ = true;
     ctx_->logHandshake(ssl_.get());
@@ -114,7 +110,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! handshake complete \n";
                : PostIoAction::Close;
   } else {
     int err = SSL_get_error(ssl_.get(), rc);
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! err " << err << " \n";
     ENVOY_CONN_LOG(debug, "handshake error: {}", callbacks_->connection(), err);
     switch (err) {
     case SSL_ERROR_WANT_READ:
@@ -128,7 +123,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! err " << err << " \n";
 }
 
 void SslSocket::drainErrorQueue() {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! drainErrorQueue \n";
   bool saw_error = false;
   bool saw_counted_error = false;
   while (uint64_t err = ERR_get_error()) {
@@ -141,7 +135,7 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! drainErrorQueue \n";
       }
     }
     saw_error = true;
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ERR_reason_error_string(err) '" << ERR_reason_error_string(err) << "' '" << ERR_lib_error_string(err) << "' '" << ERR_func_error_string(err) << "' \n";
+
     ENVOY_CONN_LOG(debug, "SSL error: {}:{}:{}:{}", callbacks_->connection(), err,
                    ERR_lib_error_string(err), ERR_func_error_string(err),
                    ERR_reason_error_string(err));
@@ -152,7 +146,7 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! ERR_reason_error_string(err) '" << ERR_reas
 }
 
 Network::IoResult SslSocket::doWrite(Buffer::Instance& write_buffer, bool end_stream) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! doWrite \n";
+
   ASSERT(!shutdown_sent_ || write_buffer.length() == 0);
   if (!handshake_complete_) {
     PostIoAction action = doHandshake();
@@ -210,12 +204,10 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! doWrite \n";
 }
 
 void SslSocket::onConnected() { 
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! onConnected \n";
   ASSERT(!handshake_complete_);
 }
 
 void SslSocket::shutdownSsl() {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! shutdownSsl \n";
   ASSERT(handshake_complete_);
   if (!shutdown_sent_ && callbacks_->connection().state() != Network::Connection::State::Closed) {
     int rc = SSL_shutdown(ssl_.get());
@@ -226,13 +218,11 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! shutdownSsl \n";
 }
 
 bool SslSocket::peerCertificatePresented() const {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! peerCertificatePresented \n";
   bssl::UniquePtr<X509> cert(SSL_get_peer_certificate(ssl_.get()));
   return cert != nullptr;
 }
 
 std::string SslSocket::uriSanLocalCertificate() {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! uriSanLocalCertificate \n";
   // The cert object is not owned.
   X509* cert = SSL_get_certificate(ssl_.get());
   if (!cert) {
@@ -242,7 +232,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! uriSanLocalCertificate \n";
 }
 
 std::vector<std::string> SslSocket::dnsSansLocalCertificate() {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! dnsSanLocalCertificate \n";
   X509* cert = SSL_get_certificate(ssl_.get());
   if (!cert) {
     return {};
@@ -251,7 +240,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! dnsSanLocalCertificate \n";
 }
 
 const std::string& SslSocket::sha256PeerCertificateDigest() const {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! sha256PeerCertificateDigest \n";
   if (!cached_sha_256_peer_certificate_digest_.empty()) {
     return cached_sha_256_peer_certificate_digest_;
   }
@@ -270,7 +258,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! sha256PeerCertificateDigest \n";
 }
 
 const std::string& SslSocket::urlEncodedPemEncodedPeerCertificate() const {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! urlEncodedPemEncodedPeerCertificate \n";
   if (!cached_url_encoded_pem_encoded_peer_certificate_.empty()) {
     return cached_url_encoded_pem_encoded_peer_certificate_;
   }
@@ -293,7 +280,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! urlEncodedPemEncodedPeerCertificate \n";
 }
 
 std::string SslSocket::uriSanPeerCertificate() const {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! uriSanPeerCertificate \n";
   bssl::UniquePtr<X509> cert(SSL_get_peer_certificate(ssl_.get()));
   if (!cert) {
     return "";
@@ -302,7 +288,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! uriSanPeerCertificate \n";
 }
 
 std::vector<std::string> SslSocket::dnsSansPeerCertificate() {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! dnsSansPeerCertificate \n";
   bssl::UniquePtr<X509> cert(SSL_get_peer_certificate(ssl_.get()));
   if (!cert) {
     return {};
@@ -311,7 +296,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! dnsSansPeerCertificate \n";
 }
 
 std::string SslSocket::getUriSanFromCertificate(X509* cert) const {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! getUriSanFromCertificate \n";
   bssl::UniquePtr<GENERAL_NAMES> san_names(
       static_cast<GENERAL_NAMES*>(X509_get_ext_d2i(cert, NID_subject_alt_name, nullptr, nullptr)));
   if (san_names == nullptr) {
@@ -329,7 +313,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! getUriSanFromCertificate \n";
 }
 
 std::vector<std::string> SslSocket::getDnsSansFromCertificate(X509* cert) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! getDnsSansFromCertificate \n";
   bssl::UniquePtr<GENERAL_NAMES> san_names(
       static_cast<GENERAL_NAMES*>(X509_get_ext_d2i(cert, NID_subject_alt_name, nullptr, nullptr)));
   if (san_names == nullptr) {
@@ -347,7 +330,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! getDnsSansFromCertificate \n";
 }
 
 void SslSocket::closeSocket(Network::ConnectionEvent) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! closeSocket \n";
   // Attempt to send a shutdown before closing the socket. It's possible this won't go out if
   // there is no room on the socket. We can extend the state machine to handle this at some point
   // if needed.
@@ -357,7 +339,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! closeSocket \n";
 }
 
 std::string SslSocket::protocol() const {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! protocol \n";
   const unsigned char* proto;
   unsigned int proto_len;
   SSL_get0_alpn_selected(ssl_.get(), &proto, &proto_len);
@@ -373,7 +354,6 @@ std::string SslSocket::serialNumberPeerCertificate() const {
 }
 
 std::string SslSocket::getSubjectFromCertificate(X509* cert) const {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! getSubjectFromCertificate \n";
   bssl::UniquePtr<BIO> buf(BIO_new(BIO_s_mem()));
   RELEASE_ASSERT(buf != nullptr, "");
 
@@ -392,7 +372,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! getSubjectFromCertificate \n";
 }
 
 std::string SslSocket::subjectPeerCertificate() const {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! subjectPeerCertificate \n";
   bssl::UniquePtr<X509> cert(SSL_get_peer_certificate(ssl_.get()));
   if (!cert) {
     return "";
@@ -401,7 +380,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!!!!!! subjectPeerCertificate \n";
 }
 
 std::string SslSocket::subjectLocalCertificate() const {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! subjectLocalCertificate \n";
   X509* cert = SSL_get_certificate(ssl_.get());
   if (!cert) {
     return "";
@@ -413,11 +391,9 @@ ClientSslSocketFactory::ClientSslSocketFactory(const ClientContextConfig& config
                                                Ssl::ContextManager& manager,
                                                Stats::Scope& stats_scope)
     : ssl_ctx_(manager.createSslClientContext(stats_scope, config)) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!! ClientSslSocketFactory \n";
 }
 
 Network::TransportSocketPtr ClientSslSocketFactory::createTransportSocket() const {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! createTransportSocket 1\n";
   return std::make_unique<Ssl::SslSocket>(ssl_ctx_, Ssl::InitialState::Client);
 }
 
@@ -428,16 +404,13 @@ ServerSslSocketFactory::ServerSslSocketFactory(const ServerContextConfig& config
                                                Stats::Scope& stats_scope,
                                                const std::vector<std::string>& server_names)
     : ssl_ctx_(manager.createSslServerContext(stats_scope, config, server_names)) {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!! ServerSslSocketFactory \n";
 }
 
 Network::TransportSocketPtr ServerSslSocketFactory::createTransportSocket() const {
-std::cerr << "!!!!!!!!!!!!!!!!!!!!!! createTransportSocket 2 \n";
   return std::make_unique<Ssl::SslSocket>(ssl_ctx_, Ssl::InitialState::Server);
 }
 
 bool ServerSslSocketFactory::implementsSecureTransport() const { 
-  std::cerr << "!!!!!!!!!!!!!!!!!!!!!! implementsSecureTransport \n";
   return true;
 }
 

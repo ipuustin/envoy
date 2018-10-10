@@ -103,7 +103,7 @@ ContextConfigImpl::ContextConfigImpl(const envoy::api::v2::auth::CommonTlsContex
           tlsVersionFromProto(config.tls_params().tls_minimum_protocol_version(), TLS1_VERSION)),
       max_protocol_version_(
           tlsVersionFromProto(config.tls_params().tls_maximum_protocol_version(), TLS1_2_VERSION)) {
-std::cerr << "!!!!!!!!!!!!!!!!!! ContextConfigImpl protocol_version \n";
+
   if (ca_cert_.empty()) {
     if (!certificate_revocation_list_.empty()) {
       throw EnvoyException(fmt::format("Failed to load CRL from {} without trusted CA",
@@ -125,7 +125,6 @@ std::cerr << "!!!!!!!!!!!!!!!!!! ContextConfigImpl protocol_version \n";
 unsigned ContextConfigImpl::tlsVersionFromProto(
     const envoy::api::v2::auth::TlsParameters_TlsProtocol& version, unsigned default_version) {
 
-std::cerr << "!!!!!!!!!!!!!!!!!!!! tlsVersionFromProto " << version << " " << envoy::api::v2::auth::TlsParameters::TLS_AUTO << " " << envoy::api::v2::auth::TlsParameters::TLSv1_2 << " " << envoy::api::v2::auth::TlsParameters::TLSv1_3 << " " << default_version << " " << TLS1_VERSION << " " << TLS1_1_VERSION << " " << TLS1_2_VERSION << " \n";
   switch (version) {
   case envoy::api::v2::auth::TlsParameters::TLS_AUTO:
     return default_version;
