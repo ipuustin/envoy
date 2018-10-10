@@ -35,27 +35,36 @@ Config::Config(Stats::Scope& scope, uint32_t max_client_hello_size)
 
   SSL_CTX_set_session_cache_mode(ssl_ctx_.get(), SSL_SESS_CACHE_OFF);
   
+  auto cert_cb = [](SSL *ssl, void *arg) -> int
+  {
+    return 0;
+  };
   SSL_CTX_set_cert_cb(ssl_ctx_.get(), cert_cb, ssl_ctx_.get());
+
+
+//  auto tlsext_servername_cb = [](SSL *ssl, void *arg) -> int
+//  {
+//    Filter* filter = static_cast<Filter*>(SSL_get_app_data(ssl));
+//    absl::string_view servername = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
+//    filter->onServername(servername);
+
+//    return SSL_TLSEXT_ERR_OK;
+//  };
   SSL_CTX_set_tlsext_servername_callback(ssl_ctx_.get(), tlsext_servername_cb);
-  SSL_CTX_set_alpn_select_cb(ssl_ctx_.get(), alpn_cb, nullptr);
-}
 
-int Config::cert_cb(SSL *ssl, void *arg)
-{
-  return 0;
-}
-
-int Config::alpn_cb(SSL *ssl,
+  auto alpn_cb = [](SSL *ssl,
                    const unsigned char **out,
                    unsigned char *outlen,
                    const unsigned char *in,
                    unsigned int inlen,
-                   void *arg)
-{
-  Filter* filter = static_cast<Filter*>(SSL_get_app_data(ssl));
-  filter->onALPN(in, inlen);
+                   void *arg) -> int
+  {
+    Filter* filter = static_cast<Filter*>(SSL_get_app_data(ssl));
+    filter->onALPN(in, inlen);
  
-  return SSL_TLSEXT_ERR_OK;
+    return SSL_TLSEXT_ERR_OK;
+  };
+  SSL_CTX_set_alpn_select_cb(ssl_ctx_.get(), alpn_cb, nullptr);
 }
 
 int Config::tlsext_servername_cb(SSL *ssl, void *arg)

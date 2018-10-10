@@ -8,9 +8,7 @@
 #include "common/common/logger.h"
 #include "common/ssl/bssl_wrapper.h"
 
-//#include "openssl/bytestring.h"
 #include "openssl/ssl.h"
-#include <openssl/err.h>
 
 namespace Envoy {
 namespace Extensions {
@@ -53,18 +51,6 @@ public:
   static constexpr size_t TLS_MAX_CLIENT_HELLO = 64 * 1024;
 
 protected:
-  static int cert_cb(SSL *ssl, void *arg);
-  static int client_cert_cb(SSL *ssl, X509 **x509, EVP_PKEY **pkey);
-  static int alpn_cb(SSL *ssl,
-                   const unsigned char **out,
-                   unsigned char *outlen,
-                   const unsigned char *in,
-                   unsigned int inlen,
-                   void *arg);
-  static int next_cb(SSL *ssl,
-              	const unsigned char **out,
-              	unsigned int *outlen,
-              	void *arg);
   static int tlsext_servername_cb(SSL *ssl, void *arg);
 
 private:

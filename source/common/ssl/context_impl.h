@@ -1,5 +1,3 @@
-#define OPENSSL_IS_BORINGSSL
-
 #pragma once
 
 #include <string>
@@ -156,17 +154,12 @@ class ServerContextImpl : public ContextImpl, public ServerContext {
 public:
   ServerContextImpl(Stats::Scope& scope, const ServerContextConfig& config,
                     const std::vector<std::string>& server_names, Runtime::Loader& runtime);
-protected:
-  static int ssl_tlsext_ticket_key_cb(SSL*, unsigned char*, unsigned char*, EVP_CIPHER_CTX*, HMAC_CTX*, int);
 
 private:
   int alpnSelectCallback(const unsigned char** out, unsigned char* outlen, const unsigned char* in,
                          unsigned int inlen);
   int sessionTicketProcess(SSL* ssl, uint8_t* key_name, uint8_t* iv, EVP_CIPHER_CTX* ctx,
                            HMAC_CTX* hmac_ctx, int encrypt);
-
-//  int ssl_tlsext_ticket_key_cb(SSL* ssl, uint8_t* key_name, uint8_t* iv, EVP_CIPHER_CTX* ctx, HMAC_CTX* hmac_ctx, int encrypt);
-  
   Runtime::Loader& runtime_;
   std::vector<uint8_t> parsed_alt_alpn_protocols_;
   const std::vector<ServerContextConfig::SessionTicketKey> session_ticket_keys_;

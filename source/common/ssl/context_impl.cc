@@ -606,10 +606,18 @@ ServerContextImpl::ServerContextImpl(Stats::Scope& scope, const ServerContextCon
                                this);
   }
 
+  auto ssl_tlsext_ticket_key_cb = [](SSL *ssl, unsigned char key_name[16], unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hmac_ctx, int encrypt) -> int 
+  {
+    ContextImpl* context_impl = static_cast<ContextImpl*>(SSL_CTX_get_ex_data(SSL_get_SSL_CTX(ssl), sslContextIndex()));
+    ServerContextImpl* server_context_impl = dynamic_cast<ServerContextImpl*>(context_impl);
+    RELEASE_ASSERT(server_context_impl != nullptr, ""); // for Coverity
+    return server_context_impl->sessionTicketProcess(ssl, key_name, iv, ctx, hmac_ctx, encrypt);
+  };
+
   if (!session_ticket_keys_.empty()) {
     SSL_CTX_set_tlsext_ticket_key_cb(
         ctx_.get(),
-        &ServerContextImpl::ssl_tlsext_ticket_key_cb);
+        &ssl_tlsext_ticket_key_cb);
   }
 
   uint8_t session_context_buf[EVP_MAX_MD_SIZE] = {};
@@ -702,15 +710,6 @@ ServerContextImpl::ServerContextImpl(Stats::Scope& scope, const ServerContextCon
 
   EVP_MD_CTX_free(md);
 
-}
-
-int ServerContextImpl::ssl_tlsext_ticket_key_cb(SSL *ssl, unsigned char key_name[16], unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hmac_ctx, int encrypt)
-{
-
-  ContextImpl* context_impl = static_cast<ContextImpl*>(SSL_CTX_get_ex_data(SSL_get_SSL_CTX(ssl), sslContextIndex()));
-  ServerContextImpl* server_context_impl = dynamic_cast<ServerContextImpl*>(context_impl);
-  RELEASE_ASSERT(server_context_impl != nullptr, ""); // for Coverity
-  return server_context_impl->sessionTicketProcess(ssl, key_name, iv, ctx, hmac_ctx, encrypt);
 }
 
 int ServerContextImpl::sessionTicketProcess(SSL*, uint8_t* key_name, uint8_t* iv,

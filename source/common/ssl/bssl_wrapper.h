@@ -1,6 +1,8 @@
 #ifndef BSSL_WRAPPER_H
 #define BSSL_WRAPPER_H
 
+#define OPENSSL_IS_BORINGSSL
+
 #include <string>
 #include <utility>
 #include <iostream>
