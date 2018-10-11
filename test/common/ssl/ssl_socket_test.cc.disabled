@@ -75,6 +75,7 @@ void testUtil(const std::string& client_ctx_json, const std::string& server_ctx_
       client_ssl_socket_factory.createTransportSocket(), nullptr);
   client_connection->connect();
 
+
   Network::ConnectionPtr server_connection;
   Network::MockConnectionCallbacks server_connection_callbacks;
   EXPECT_CALL(callbacks, onAccept_(_, _))
@@ -92,6 +93,7 @@ void testUtil(const std::string& client_ctx_json, const std::string& server_ctx_
   if (expect_success) {
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::Connected))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void {
+
           if (!expected_digest.empty()) {
             // Assert twice to ensure a cached value is returned and still valid.
             EXPECT_EQ(expected_digest, server_connection->ssl()->sha256PeerCertificateDigest());
@@ -116,11 +118,14 @@ void testUtil(const std::string& client_ctx_json, const std::string& server_ctx_
             EXPECT_EQ(expected_peer_cert,
                       server_connection->ssl()->urlEncodedPemEncodedPeerCertificate());
           }
+
           server_connection->close(Network::ConnectionCloseType::NoFlush);
           client_connection->close(Network::ConnectionCloseType::NoFlush);
           dispatcher.exit();
         }));
+
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
+
   } else {
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::RemoteClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void {
@@ -133,7 +138,7 @@ void testUtil(const std::string& client_ctx_json, const std::string& server_ctx_
 
   if (!expected_stats.empty()) {
     EXPECT_EQ(1UL, stats_store.counter(expected_stats).value());
-  }
+  } 
 }
 
 const std::string testUtilV2(const envoy::api::v2::Listener& server_proto,
@@ -207,11 +212,14 @@ const std::string testUtilV2(const envoy::api::v2::Listener& server_proto,
       }));
 
   Network::MockConnectionCallbacks client_connection_callbacks;
+
   client_connection->addConnectionCallbacks(client_connection_callbacks);
+
   client_connection->connect();
 
   unsigned connect_count = 0;
   auto stopSecondTime = [&]() {
+
     if (++connect_count == 2) {
       if (!expected_server_cert_digest.empty()) {
         EXPECT_EQ(expected_server_cert_digest,
@@ -228,12 +236,10 @@ const std::string testUtilV2(const envoy::api::v2::Listener& server_proto,
       }
       SSL_SESSION* client_ssl_session = SSL_get_session(client_ssl_socket);
       //EXPECT_TRUE(SSL_SESSION_is_resumable(client_ssl_session));
-      uint8_t* session_data = (uint8_t*)SSL_SESSION_get_ex_data(client_ssl_session, 0);
-      //size_t session_len;
-      //int rc = SSL_SESSION_to_bytes(client_ssl_session, &session_data, &session_len);
+      size_t session_len;
+      //int rc = ssl_session_to_bytes(client_ssl_session, &session_data, &session_len);
       //ASSERT(rc == 1);
-      new_session = std::string(reinterpret_cast<char*>(session_data)); //, session_len);
-      OPENSSL_free(session_data);
+
       server_connection->close(Network::ConnectionCloseType::NoFlush);
       client_connection->close(Network::ConnectionCloseType::NoFlush);
       dispatcher.exit();
@@ -263,7 +269,7 @@ const std::string testUtilV2(const envoy::api::v2::Listener& server_proto,
 
   if (!expected_stats.empty()) {
     EXPECT_EQ(expected_stats_value, stats_store.counter(expected_stats).value());
-  }
+  } 
 
   return new_session;
 }
@@ -1864,7 +1870,7 @@ void testTicketSessionResumption(const std::string& server_ctx_json1,
 }
 } // namespace
 
-TEST_P(SslSocketTest, DISABLED_TicketSessionResumption) {
+TEST_P(SslSocketTest, TicketSessionResumption) {
   std::string server_ctx_json = R"EOF(
   {
     "cert_chain_file": "{{ test_tmpdir }}/unittestcert.pem",
@@ -1908,7 +1914,7 @@ TEST_P(SslSocketTest, DISABLED_TicketSessionResumptionRotateKey) {
   {
     "cert_chain_file": "{{ test_tmpdir }}/unittestcert.pem",
     "private_key_file": "{{ test_tmpdir }}/unittestkey.pem",
-    "session_ticket_key_paths": [cp -rf /home/root/workspaces/proxy-1.0.0-snapshot2/envoy/test/common/ssl/ envoy/test/common/ssl/
+    "session_ticket_key_paths": [
       "{{ test_rundir }}/test/common/ssl/test_data/ticket_key_a"
     ]
   }
@@ -2321,16 +2327,15 @@ TEST_P(SslSocketTest, DISABLED_ProtocolVersions) {
   // ssl.handshake logged by both: client & server.
   client_params->set_tls_minimum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_2);
   client_params->set_tls_maximum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_2);
-  testUtilV2(listener, client, "", true, "TLSv1.2", "", "", "", "", "ssl.handshake", 2, GetParam());
+  testUtilV2(listener, client, "", true, "", "", "", "", "", "ssl.handshake", 2, GetParam());
 
   // Connection using TLSv1.3 (client) and defaults (server) fails.
   client_params->set_tls_minimum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
   client_params->set_tls_maximum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
-  testUtilV2(listener, client, "", false, "", "", "", "", "", "ssl.connection_error", 1,
-             GetParam());
+  testUtilV2(listener, client, "", false, "", "", "", "", "", "ssl.connection_error", 1, GetParam());
 
   // Connection using TLSv1.3 (client) and TLSv1.0-1.3 (server) succeeds.
-  // ssl.handshake logged by both: client & server.
+  //ssl.handshake logged by both: client & server.
   server_params->set_tls_minimum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_0);
   server_params->set_tls_maximum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
   testUtilV2(listener, client, "", true, "TLSv1.3", "", "", "", "", "ssl.handshake", 2, GetParam());
@@ -2366,6 +2371,7 @@ TEST_P(SslSocketTest, DISABLED_ProtocolVersions) {
   client_params->set_tls_minimum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_0);
   client_params->set_tls_maximum_protocol_version(envoy::api::v2::auth::TlsParameters::TLSv1_3);
   testUtilV2(listener, client, "", true, "TLSv1.3", "", "", "", "", "ssl.handshake", 2, GetParam());
+
 }
 
 TEST_P(SslSocketTest, DISABLED_ALPN) {
