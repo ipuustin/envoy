@@ -9,11 +9,12 @@
 #include "envoy/stats/stats.h"
 #include "envoy/stats/stats_macros.h"
 
-#include "common/ssl/bssl_wrapper.h"
 #include "common/ssl/context_impl.h"
 #include "common/ssl/context_manager_impl.h"
 
 #include "openssl/ssl.h"
+
+#include "common/ssl/ssl_impl.h"
 
 namespace Envoy {
 #ifndef OPENSSL_IS_BORINGSSL

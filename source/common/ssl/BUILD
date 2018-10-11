@@ -96,7 +96,7 @@ envoy_cc_library(
 envoy_cc_library(
     name = "bssl_wrapper_lib",
     srcs = ["bssl_wrapper.cc"],
-    hdrs = ["bssl_wrapper.h"],
+    hdrs = ["bssl_wrapper.h", "ssl_impl.h"],
     deps = [
          "@openssl_crypto//:openssl-lib",
     ],

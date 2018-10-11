@@ -6,9 +6,10 @@
 #include "envoy/stats/stats_macros.h"
 
 #include "common/common/logger.h"
-#include "common/ssl/bssl_wrapper.h"
 
 #include "openssl/ssl.h"
+
+#include "common/ssl/ssl_impl.h"
 
 namespace Envoy {
 namespace Extensions {
