@@ -6,11 +6,6 @@ def envoy_package():
 # Compute the final copts based on various options.
 def envoy_copts(repository, test = False):
     posix_options = [
-        "-Wall",
-        "-Wextra",
-        "-Werror",
-        "-Wnon-virtual-dtor",
-        "-Woverloaded-virtual",
         "-Wold-style-cast",
         "-std=c++14",
     ]
@@ -94,10 +89,7 @@ def _envoy_stamped_linkopts():
             "$(location @envoy//bazel:raw_build_id.ldscript)",
         ],
 
-        # Note: assumes GNU GCC (or compatible) handling of `--build-id` flag.
-        "//conditions:default": [
-            "-Wl,@$(location @envoy//bazel:gnu_build_id.ldscript)",
-        ],
+        "//conditions:default": [],
     })
 
 def _envoy_stamped_deps():
