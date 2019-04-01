@@ -166,7 +166,13 @@ def envoy_dependencies(skip_targets = []):
     api_dependencies()
 
 def _boringssl():
-    _repository_impl("boringssl")
+    _repository_impl(
+        "boringssl",
+        patches = [
+            "@envoy//bazel/external:boringssl-export-syms.patch",
+        ],
+        patch_args = ["-p1"],
+    )
 
 def _boringssl_fips():
     location = REPOSITORY_LOCATIONS["boringssl_fips"]
