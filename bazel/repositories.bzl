@@ -180,7 +180,10 @@ def _boringssl():
     _repository_impl(
         name = "boringssl",
         patch_args = ["-p1"],
-        patches = ["@envoy//bazel:boringssl_static.patch"],
+        patches = [
+            "@envoy//bazel:boringssl_static.patch",
+            "@envoy//bazel/external:boringssl-export-syms.patch",
+        ],
     )
 
 def _boringssl_fips():
