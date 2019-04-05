@@ -482,7 +482,7 @@ DEPENDENCY_REPOSITORIES = dict(
         cpe = "cpe:2.3:a:icu-project:international_components_for_unicode",
     ),
     com_intel_qat = dict(
-        sha256 = "ca76d7f51faf6f5a7c7288c4fc724125b91f0a3c155126ef1a12b697eff3ff7a",
-        urls = ["https://01.org/sites/default/files/downloads/intelr-quickassist-technology/qat1.7.l.4.3.0-00033.tar.gz"],
+        sha256 = "c42a3afc1a5c76d441eaca8b97dc1f9ee64939ec001539ee1a2f3b39b7543c8e",
+        urls = ["https://01.org/sites/default/files/downloads//qat1.7.l.4.5.0-00034.tar.gz"],
     ),
 )
