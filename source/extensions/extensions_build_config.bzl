@@ -213,6 +213,9 @@ EXTENSIONS = {
 
     "envoy.retry_priorities.previous_priorities":       "//source/extensions/retry/priority/previous_priorities:config",
 
+    # Private key operations providers
+    "envoy.private_key_operations_providers.qat":       "//source/extensions/private_key_operations_providers/qat:config",
+
     #
     # CacheFilter plugins
     #
