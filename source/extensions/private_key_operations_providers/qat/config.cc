@@ -14,25 +14,25 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace PrivateKeyOperationsProviders {
+namespace PrivateKeyMethodProviders {
 
-Ssl::PrivateKeyOperationsProviderSharedPtr
-QatPrivateKeyOperationsFactory::createPrivateKeyOperationsProviderInstance(
-    const envoy::api::v2::auth::PrivateKeyOperations& message,
+Ssl::PrivateKeyMethodProviderSharedPtr
+QatPrivateKeyMethodFactory::createPrivateKeyMethodProviderInstance(
+    const envoy::api::v2::auth::PrivateKeyMethod& message,
     Server::Configuration::TransportSocketFactoryContext& private_key_provider_context) {
   (void)private_key_provider_context;
-  ProtobufTypes::MessagePtr proto_config = std::make_unique<qat::QatPrivateKeyOperationsConfig>();
+  ProtobufTypes::MessagePtr proto_config = std::make_unique<qat::QatPrivateKeyMethodConfig>();
 
   Config::Utility::translateOpaqueConfig(message.typed_config(), ProtobufWkt::Struct(),
                                          *proto_config);
-  const qat::QatPrivateKeyOperationsConfig conf =
-      MessageUtil::downcastAndValidate<const qat::QatPrivateKeyOperationsConfig&>(*proto_config);
+  const qat::QatPrivateKeyMethodConfig conf =
+      MessageUtil::downcastAndValidate<const qat::QatPrivateKeyMethodConfig&>(*proto_config);
 
-  return std::make_shared<QatPrivateKeyOperationsProvider>(conf, private_key_provider_context);
+  return std::make_shared<QatPrivateKeyMethodProvider>(conf, private_key_provider_context);
 }
 
-REGISTER_FACTORY(QatPrivateKeyOperationsFactory, Ssl::PrivateKeyOperationsProviderInstanceFactory);
+REGISTER_FACTORY(QatPrivateKeyMethodFactory, Ssl::PrivateKeyMethodProviderInstanceFactory);
 
-} // namespace PrivateKeyOperationsProviders
+} // namespace PrivateKeyMethodProviders
 } // namespace Extensions
 } // namespace Envoy

@@ -11,46 +11,50 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace PrivateKeyOperationsProviders {
+namespace PrivateKeyMethodProviders {
 
-class QatPrivateKeyOperations : public virtual Ssl::PrivateKeyOperations {
+class QatPrivateKeyConnection : public virtual Ssl::PrivateKeyConnection {
 public:
-  QatPrivateKeyOperations(Ssl::PrivateKeyOperationsCallbacks& cb, Event::Dispatcher& dispatcher,
-                          QatHandle& handle);
-
-  // Ssl::PrivateKeyOperations
-  Ssl::PrivateKeyMethodSharedPtr getPrivateKeyMethods(SSL* ssl) override;
+  QatPrivateKeyConnection(SSL* ssl, Ssl::PrivateKeyConnectionCallbacks& cb,
+                          Event::Dispatcher& dispatcher, QatHandle& handle,
+                          bssl::UniquePtr<EVP_PKEY> pkey);
 
   void registerCallback(QatContext* ctx);
   void unregisterCallback();
   QatHandle& getHandle() { return handle_; };
+  EVP_PKEY* getPrivateKey() { return pkey_.get(); };
 
 private:
-  Ssl::PrivateKeyMethodSharedPtr ops_{};
-  Ssl::PrivateKeyOperationsCallbacks& cb_;
+  Ssl::PrivateKeyConnectionCallbacks& cb_;
 
   Event::Dispatcher& dispatcher_;
   Event::FileEventPtr ssl_async_event_{};
   QatHandle& handle_;
+  bssl::UniquePtr<EVP_PKEY> pkey_;
 };
 
-class QatPrivateKeyOperationsProvider : public virtual Ssl::PrivateKeyOperationsProvider {
+class QatPrivateKeyMethodProvider : public virtual Ssl::PrivateKeyMethodProvider {
 public:
-  QatPrivateKeyOperationsProvider(
-      const qat::QatPrivateKeyOperationsConfig& config,
+  QatPrivateKeyMethodProvider(
+      const qat::QatPrivateKeyMethodConfig& config,
       Server::Configuration::TransportSocketFactoryContext& private_key_provider_context);
-  // Ssl::PrivateKeyOperationsProvider
-  Ssl::PrivateKeyOperationsPtr getPrivateKeyOperations(Ssl::PrivateKeyOperationsCallbacks& cb,
+  // Ssl::PrivateKeyMethodProvider
+  Ssl::PrivateKeyConnectionPtr getPrivateKeyConnection(SSL* ssl,
+                                                       Ssl::PrivateKeyConnectionCallbacks& cb,
                                                        Event::Dispatcher& dispatcher) override;
 
+  Ssl::BoringSslPrivateKeyMethodSharedPtr getBoringSslPrivateKeyMethod() override;
+
 private:
+  Ssl::BoringSslPrivateKeyMethodSharedPtr ops_{};
   std::shared_ptr<QatManager> manager_;
   std::shared_ptr<QatSection> section_;
   std::string section_name_;
+  std::string private_key_;
   uint32_t poll_delay_;
   Api::Api& api_;
 };
 
-} // namespace PrivateKeyOperationsProviders
+} // namespace PrivateKeyMethodProviders
 } // namespace Extensions
 } // namespace Envoy
