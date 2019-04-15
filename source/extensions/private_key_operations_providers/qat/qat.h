@@ -24,7 +24,7 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace PrivateKeyOperationsProviders {
+namespace PrivateKeyMethodProviders {
 
 const int QAT_BUFFER_SIZE = 1024;
 
@@ -118,6 +118,6 @@ private:
   int write_fd_;
 };
 
-} // namespace PrivateKeyOperationsProviders
+} // namespace PrivateKeyMethodProviders
 } // namespace Extensions
 } // namespace Envoy
