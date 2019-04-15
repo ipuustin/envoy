@@ -4,7 +4,8 @@ package qat;
 
 import "validate/validate.proto";
 
-message QatPrivateKeyOperationsConfig {
+message QatPrivateKeyMethodConfig {
   string section_name = 1 [(validate.rules).string.min_bytes = 1];
-  uint32 poll_delay = 2 [(validate.rules).uint32.gte = 1];
+  string private_key = 2;
+  uint32 poll_delay = 3 [(validate.rules).uint32.gte = 1];
 }

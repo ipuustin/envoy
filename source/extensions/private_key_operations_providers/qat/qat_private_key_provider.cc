@@ -11,11 +11,11 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace PrivateKeyOperationsProviders {
+namespace PrivateKeyMethodProviders {
 
 SINGLETON_MANAGER_REGISTRATION(qat_manager);
 
-void QatPrivateKeyOperations::registerCallback(QatContext* ctx) {
+void QatPrivateKeyConnection::registerCallback(QatContext* ctx) {
 
   // Get the receiving end of the notification pipe. The other end is written to by the polling
   // thread.
@@ -35,13 +35,13 @@ void QatPrivateKeyOperations::registerCallback(QatContext* ctx) {
           ctx->setOpStatus(status);
         }
         this->cb_.complete(status == CPA_STATUS_SUCCESS
-                               ? Envoy::Ssl::PrivateKeyOperationStatus::Success
-                               : Envoy::Ssl::PrivateKeyOperationStatus::Failure);
+                               ? Envoy::Ssl::PrivateKeyMethodStatus::Success
+                               : Envoy::Ssl::PrivateKeyMethodStatus::Failure);
       },
       Event::FileTriggerType::Edge, Event::FileReadyType::Read);
 }
 
-void QatPrivateKeyOperations::unregisterCallback() { ssl_async_event_ = nullptr; }
+void QatPrivateKeyConnection::unregisterCallback() { ssl_async_event_ = nullptr; }
 
 static ssl_private_key_result_t privateKeySign(SSL* ssl, uint8_t* out, size_t* out_len,
                                                size_t max_out, uint16_t signature_algorithm,
@@ -62,7 +62,7 @@ static ssl_private_key_result_t privateKeySign(SSL* ssl, uint8_t* out, size_t* o
   QatContext* qat_ctx = nullptr;
   int padding = RSA_NO_PADDING;
 
-  QatPrivateKeyOperations* ops = static_cast<QatPrivateKeyOperations*>(
+  QatPrivateKeyConnection* ops = static_cast<QatPrivateKeyConnection*>(
       SSL_get_ex_data(ssl, QatManager::ssl_qat_provider_index));
 
   if (!ops) {
@@ -71,7 +71,7 @@ static ssl_private_key_result_t privateKeySign(SSL* ssl, uint8_t* out, size_t* o
 
   QatHandle& qat_handle = ops->getHandle();
 
-  EVP_PKEY* rsa_pkey = SSL_get_privatekey(ssl);
+  EVP_PKEY* rsa_pkey = ops->getPrivateKey();
 
   // Check if the SSL instance has correct data attached to it.
   if (!rsa_pkey) {
@@ -157,7 +157,10 @@ static ssl_private_key_result_t privateKeyDecrypt(SSL* ssl, uint8_t* out, size_t
   (void)out_len;
   (void)max_out;
 
-  QatPrivateKeyOperations* ops = static_cast<QatPrivateKeyOperations*>(
+  RSA* rsa;
+  QatContext* qat_ctx = nullptr;
+
+  QatPrivateKeyConnection* ops = static_cast<QatPrivateKeyConnection*>(
       SSL_get_ex_data(ssl, QatManager::ssl_qat_provider_index));
 
   if (!ops) {
@@ -165,10 +168,7 @@ static ssl_private_key_result_t privateKeyDecrypt(SSL* ssl, uint8_t* out, size_t
   }
 
   QatHandle& qat_handle = ops->getHandle();
-
-  EVP_PKEY* rsa_pkey = SSL_get_privatekey(ssl);
-  RSA* rsa;
-  QatContext* qat_ctx = nullptr;
+  EVP_PKEY* rsa_pkey = ops->getPrivateKey();
 
   // Check if the SSL instance has correct data attached to it.
   if (!rsa_pkey) {
@@ -209,7 +209,7 @@ error:
 static ssl_private_key_result_t privateKeyComplete(SSL* ssl, uint8_t* out, size_t* out_len,
                                                    size_t max_out) {
 
-  QatPrivateKeyOperations* ops = static_cast<QatPrivateKeyOperations*>(
+  QatPrivateKeyConnection* ops = static_cast<QatPrivateKeyConnection*>(
       SSL_get_ex_data(ssl, QatManager::ssl_qat_provider_index));
 
   if (!ops) {
@@ -256,32 +256,21 @@ static ssl_private_key_result_t privateKeyComplete(SSL* ssl, uint8_t* out, size_
   return ssl_private_key_success;
 }
 
-Ssl::PrivateKeyMethodSharedPtr QatPrivateKeyOperations::getPrivateKeyMethods(SSL* ssl) {
-  // Check that the private key is right in the ssl context. We only support RSA auth now.
-  EVP_PKEY* pkey = SSL_get_privatekey(ssl);
-  if (pkey == nullptr || EVP_PKEY_get0_RSA(pkey) == nullptr) {
-    return nullptr;
-  }
-
-  if (!SSL_set_ex_data(ssl, QatManager::ssl_qat_provider_index, this)) {
-    return nullptr;
-  }
-
+Ssl::BoringSslPrivateKeyMethodSharedPtr
+QatPrivateKeyMethodProvider::getBoringSslPrivateKeyMethod() {
   return ops_;
 }
 
-QatPrivateKeyOperations::QatPrivateKeyOperations(Ssl::PrivateKeyOperationsCallbacks& cb,
-                                                 Event::Dispatcher& dispatcher, QatHandle& handle)
-    : cb_(cb), dispatcher_(dispatcher), handle_(handle) {
-  ops_ = std::make_shared<SSL_PRIVATE_KEY_METHOD>();
-  ops_->sign = privateKeySign;
-  ops_->decrypt = privateKeyDecrypt;
-  ops_->complete = privateKeyComplete;
+QatPrivateKeyConnection::QatPrivateKeyConnection(SSL* ssl, Ssl::PrivateKeyConnectionCallbacks& cb,
+                                                 Event::Dispatcher& dispatcher, QatHandle& handle,
+                                                 bssl::UniquePtr<EVP_PKEY> pkey)
+    : cb_(cb), dispatcher_(dispatcher), handle_(handle), pkey_(move(pkey)) {
+  SSL_set_ex_data(ssl, QatManager::ssl_qat_provider_index, this);
 }
 
-Ssl::PrivateKeyOperationsPtr
-QatPrivateKeyOperationsProvider::getPrivateKeyOperations(Ssl::PrivateKeyOperationsCallbacks& cb,
-                                                         Event::Dispatcher& dispatcher) {
+Ssl::PrivateKeyConnectionPtr QatPrivateKeyMethodProvider::getPrivateKeyConnection(
+    SSL* ssl, Ssl::PrivateKeyConnectionCallbacks& cb, Event::Dispatcher& dispatcher) {
+  (void)ssl;
 
   if (section_ == nullptr || !section_->isInitialized()) {
     return nullptr;
@@ -289,11 +278,15 @@ QatPrivateKeyOperationsProvider::getPrivateKeyOperations(Ssl::PrivateKeyOperatio
 
   QatHandle& handle = section_->getNextHandle();
 
-  return std::make_unique<QatPrivateKeyOperations>(cb, dispatcher, handle);
+  bssl::UniquePtr<BIO> bio(
+      BIO_new_mem_buf(const_cast<char*>(private_key_.data()), private_key_.size()));
+  bssl::UniquePtr<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
+
+  return std::make_unique<QatPrivateKeyConnection>(ssl, cb, dispatcher, handle, move(pkey));
 }
 
-QatPrivateKeyOperationsProvider::QatPrivateKeyOperationsProvider(
-    const qat::QatPrivateKeyOperationsConfig& conf,
+QatPrivateKeyMethodProvider::QatPrivateKeyMethodProvider(
+    const qat::QatPrivateKeyMethodConfig& conf,
     Server::Configuration::TransportSocketFactoryContext& factory_context)
     : api_(factory_context.api()) {
 
@@ -303,6 +296,12 @@ QatPrivateKeyOperationsProvider::QatPrivateKeyOperationsProvider(
 
   section_name_ = conf.section_name();
   poll_delay_ = conf.poll_delay();
+  private_key_ = factory_context.api().fileSystem().fileReadToEnd(conf.private_key());
+
+  ops_ = std::make_shared<SSL_PRIVATE_KEY_METHOD>();
+  ops_->sign = privateKeySign;
+  ops_->decrypt = privateKeyDecrypt;
+  ops_->complete = privateKeyComplete;
 
   std::shared_ptr<QatSection> section = manager_->findSection(section_name_);
   if (section != nullptr) {
@@ -316,6 +315,6 @@ QatPrivateKeyOperationsProvider::QatPrivateKeyOperationsProvider(
   }
 }
 
-} // namespace PrivateKeyOperationsProviders
+} // namespace PrivateKeyMethodProviders
 } // namespace Extensions
 } // namespace Envoy
