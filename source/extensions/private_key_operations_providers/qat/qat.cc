@@ -4,7 +4,7 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace PrivateKeyOperationsProviders {
+namespace PrivateKeyMethodProviders {
 
 int QatManager::ssl_qat_provider_index = -1;
 int QatManager::ssl_qat_context_index = -1;
@@ -417,6 +417,6 @@ int QatContext::getFd() { return read_fd_; }
 
 int QatContext::getWriteFd() { return write_fd_; };
 
-} // namespace PrivateKeyOperationsProviders
+} // namespace PrivateKeyMethodProviders
 } // namespace Extensions
 } // namespace Envoy
