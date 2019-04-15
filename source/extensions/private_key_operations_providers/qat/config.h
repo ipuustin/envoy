@@ -8,16 +8,16 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace PrivateKeyOperationsProviders {
+namespace PrivateKeyMethodProviders {
 
-class QatPrivateKeyOperationsFactory : public Ssl::PrivateKeyOperationsProviderInstanceFactory {
-  // Ssl::PrivateKeyOperationsProviderInstanceFactory
-  Ssl::PrivateKeyOperationsProviderSharedPtr createPrivateKeyOperationsProviderInstance(
-      const envoy::api::v2::auth::PrivateKeyOperations& message,
+class QatPrivateKeyMethodFactory : public Ssl::PrivateKeyMethodProviderInstanceFactory {
+  // Ssl::PrivateKeyMethodProviderInstanceFactory
+  Ssl::PrivateKeyMethodProviderSharedPtr createPrivateKeyMethodProviderInstance(
+      const envoy::api::v2::auth::PrivateKeyMethod& message,
       Server::Configuration::TransportSocketFactoryContext& private_key_provider_context);
 
   std::string name() const { return "qat"; };
 };
-} // namespace PrivateKeyOperationsProviders
+} // namespace PrivateKeyMethodProviders
 } // namespace Extensions
 } // namespace Envoy
