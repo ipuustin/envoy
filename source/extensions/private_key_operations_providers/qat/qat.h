@@ -69,7 +69,7 @@ private:
 class QatManager : public std::enable_shared_from_this<QatManager>, public Singleton::Instance {
 public:
   static void qatPoll(QatHandle& handle, uint32_t poll_delay);
-  static int ssl_qat_provider_index;
+  static int ssl_qat_connection_index;
   static int ssl_qat_context_index;
 
   QatManager();

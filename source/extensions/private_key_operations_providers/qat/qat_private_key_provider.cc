@@ -63,7 +63,7 @@ static ssl_private_key_result_t privateKeySign(SSL* ssl, uint8_t* out, size_t* o
   int padding = RSA_NO_PADDING;
 
   QatPrivateKeyConnection* ops = static_cast<QatPrivateKeyConnection*>(
-      SSL_get_ex_data(ssl, QatManager::ssl_qat_provider_index));
+      SSL_get_ex_data(ssl, QatManager::ssl_qat_connection_index));
 
   if (!ops) {
     return ssl_private_key_failure;
@@ -161,7 +161,7 @@ static ssl_private_key_result_t privateKeyDecrypt(SSL* ssl, uint8_t* out, size_t
   QatContext* qat_ctx = nullptr;
 
   QatPrivateKeyConnection* ops = static_cast<QatPrivateKeyConnection*>(
-      SSL_get_ex_data(ssl, QatManager::ssl_qat_provider_index));
+      SSL_get_ex_data(ssl, QatManager::ssl_qat_connection_index));
 
   if (!ops) {
     return ssl_private_key_failure;
@@ -210,7 +210,7 @@ static ssl_private_key_result_t privateKeyComplete(SSL* ssl, uint8_t* out, size_
                                                    size_t max_out) {
 
   QatPrivateKeyConnection* ops = static_cast<QatPrivateKeyConnection*>(
-      SSL_get_ex_data(ssl, QatManager::ssl_qat_provider_index));
+      SSL_get_ex_data(ssl, QatManager::ssl_qat_connection_index));
 
   if (!ops) {
     return ssl_private_key_failure;
@@ -258,21 +258,21 @@ static ssl_private_key_result_t privateKeyComplete(SSL* ssl, uint8_t* out, size_
 
 Ssl::BoringSslPrivateKeyMethodSharedPtr
 QatPrivateKeyMethodProvider::getBoringSslPrivateKeyMethod() {
-  return ops_;
+  return method_;
 }
 
 QatPrivateKeyConnection::QatPrivateKeyConnection(SSL* ssl, Ssl::PrivateKeyConnectionCallbacks& cb,
                                                  Event::Dispatcher& dispatcher, QatHandle& handle,
                                                  bssl::UniquePtr<EVP_PKEY> pkey)
     : cb_(cb), dispatcher_(dispatcher), handle_(handle), pkey_(move(pkey)) {
-  SSL_set_ex_data(ssl, QatManager::ssl_qat_provider_index, this);
+  SSL_set_ex_data(ssl, QatManager::ssl_qat_connection_index, this);
 }
 
 Ssl::PrivateKeyConnectionPtr QatPrivateKeyMethodProvider::getPrivateKeyConnection(
     SSL* ssl, Ssl::PrivateKeyConnectionCallbacks& cb, Event::Dispatcher& dispatcher) {
   (void)ssl;
 
-  if (section_ == nullptr || !section_->isInitialized()) {
+  if (!initialized_ || section_ == nullptr || !section_->isInitialized()) {
     return nullptr;
   }
 
@@ -281,7 +281,9 @@ Ssl::PrivateKeyConnectionPtr QatPrivateKeyMethodProvider::getPrivateKeyConnectio
   bssl::UniquePtr<BIO> bio(
       BIO_new_mem_buf(const_cast<char*>(private_key_.data()), private_key_.size()));
   bssl::UniquePtr<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
-
+  if (pkey == nullptr) {
+    return nullptr;
+  }
   return std::make_unique<QatPrivateKeyConnection>(ssl, cb, dispatcher, handle, move(pkey));
 }
 
@@ -298,10 +300,10 @@ QatPrivateKeyMethodProvider::QatPrivateKeyMethodProvider(
   poll_delay_ = conf.poll_delay();
   private_key_ = factory_context.api().fileSystem().fileReadToEnd(conf.private_key());
 
-  ops_ = std::make_shared<SSL_PRIVATE_KEY_METHOD>();
-  ops_->sign = privateKeySign;
-  ops_->decrypt = privateKeyDecrypt;
-  ops_->complete = privateKeyComplete;
+  method_ = std::make_shared<SSL_PRIVATE_KEY_METHOD>();
+  method_->sign = privateKeySign;
+  method_->decrypt = privateKeyDecrypt;
+  method_->complete = privateKeyComplete;
 
   std::shared_ptr<QatSection> section = manager_->findSection(section_name_);
   if (section != nullptr) {
@@ -309,9 +311,9 @@ QatPrivateKeyMethodProvider::QatPrivateKeyMethodProvider(
   } else {
     section_ = manager_->addSection(section_name_);
     if (section_ != nullptr && section_->startSection(api_, poll_delay_)) {
-      // TODO(ipuustin): log success
+      initialized_ = true;
     }
-    // Else throw an error? Or mark non-functional and later return no ops?
+    // Else no private key connection intance will be returned later.
   }
 }
 
