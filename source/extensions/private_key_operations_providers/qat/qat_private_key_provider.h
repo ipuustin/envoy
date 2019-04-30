@@ -26,7 +26,6 @@ public:
 
 private:
   Ssl::PrivateKeyConnectionCallbacks& cb_;
-
   Event::Dispatcher& dispatcher_;
   Event::FileEventPtr ssl_async_event_{};
   QatHandle& handle_;
@@ -42,16 +41,16 @@ public:
   Ssl::PrivateKeyConnectionPtr getPrivateKeyConnection(SSL* ssl,
                                                        Ssl::PrivateKeyConnectionCallbacks& cb,
                                                        Event::Dispatcher& dispatcher) override;
-
   Ssl::BoringSslPrivateKeyMethodSharedPtr getBoringSslPrivateKeyMethod() override;
 
 private:
-  Ssl::BoringSslPrivateKeyMethodSharedPtr ops_{};
+  Ssl::BoringSslPrivateKeyMethodSharedPtr method_{};
   std::shared_ptr<QatManager> manager_;
   std::shared_ptr<QatSection> section_;
   std::string section_name_;
   std::string private_key_;
   uint32_t poll_delay_;
+  bool initialized_{};
   Api::Api& api_;
 };
 

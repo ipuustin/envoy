@@ -6,7 +6,7 @@ namespace Envoy {
 namespace Extensions {
 namespace PrivateKeyMethodProviders {
 
-int QatManager::ssl_qat_provider_index = -1;
+int QatManager::ssl_qat_connection_index = -1;
 int QatManager::ssl_qat_context_index = -1;
 
 void QatManager::qatPoll(QatHandle& handle, uint32_t poll_delay) {
@@ -130,7 +130,8 @@ QatHandle& QatSection::getNextHandle() {
 
 QatManager::QatManager() {
   // Initialize the indexes for the data we need to keep within the SSL context.
-  QatManager::ssl_qat_provider_index = SSL_get_ex_new_index(0, nullptr, nullptr, nullptr, nullptr);
+  QatManager::ssl_qat_connection_index =
+      SSL_get_ex_new_index(0, nullptr, nullptr, nullptr, nullptr);
   QatManager::ssl_qat_context_index = SSL_get_ex_new_index(0, nullptr, nullptr, nullptr, nullptr);
 }
 
