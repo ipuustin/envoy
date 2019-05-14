@@ -123,7 +123,7 @@ PostIoAction SslSocket::doHandshake() {
 
   ASSERT(!handshake_complete_);
 
-  std::function<void(int)> cb = [this](int fd) void { this->asyncCb(fd); };
+  std::function<void(int)> cb = [this](int fd) { this->asyncCb(fd); };
 
   int rc = SSL_do_handshake(ssl_.get());
 
