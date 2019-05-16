@@ -34,9 +34,7 @@ void QatPrivateKeyConnection::registerCallback(QatContext* ctx) {
           }
           ctx->setOpStatus(status);
         }
-        this->cb_.complete(status == CPA_STATUS_SUCCESS
-                               ? Envoy::Ssl::PrivateKeyMethodStatus::Success
-                               : Envoy::Ssl::PrivateKeyMethodStatus::Failure);
+        this->cb_.complete();
       },
       Event::FileTriggerType::Edge, Event::FileReadyType::Read);
 }
