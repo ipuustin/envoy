@@ -314,7 +314,7 @@ ContextImpl::ContextImpl(Stats::Scope& scope, const Envoy::Ssl::ContextConfig& c
     // We either have a private key or a BoringSSL private key method provider.
     if (private_key_method_provider) {
       ctx.private_key_method_provider_ = private_key_method_provider;
-      // The provider has a reference to the private key method for the context lifetime.
+      // The provider has a reference to the private key and aead methods for the context lifetime.
       Ssl::BoringSslPrivateKeyMethodSharedPtr private_key_method =
           private_key_method_provider->getBoringSslPrivateKeyMethod();
       if (private_key_method == nullptr) {
@@ -328,6 +328,12 @@ ContextImpl::ContextImpl(Stats::Scope& scope, const Envoy::Ssl::ContextConfig& c
       }
 #endif
       SSL_CTX_set_private_key_method(ctx.ssl_ctx_.get(), private_key_method.get());
+
+      Ssl::BoringSslAeadMethodSharedPtr aead_method =
+          private_key_method_provider->getBoringSslAeadMethod();
+      if (aead_method != nullptr) {
+        SSL_CTX_set_ticket_aead_method(ctx.ssl_ctx_.get(), aead_method.get());
+      }
     } else {
       // Load private key.
       bio.reset(BIO_new_mem_buf(const_cast<char*>(tls_certificate.privateKey().data()),

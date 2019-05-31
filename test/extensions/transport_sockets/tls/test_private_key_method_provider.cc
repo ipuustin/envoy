@@ -198,6 +198,10 @@ static ssl_private_key_result_t privateKeyComplete(SSL* ssl, uint8_t* out, size_
                                                    size_t max_out, int id) {
   TestPrivateKeyConnection* ops = static_cast<TestPrivateKeyConnection*>(SSL_get_ex_data(ssl, id));
 
+  if (!ops) {
+    return ssl_private_key_failure;
+  }
+
   if (!ops->finished_) {
     // The operation didn't finish yet, retry.
     return ssl_private_key_retry;
@@ -233,6 +237,96 @@ Ssl::BoringSslPrivateKeyMethodSharedPtr
 TestPrivateKeyMethodProvider::getBoringSslPrivateKeyMethod() {
   return method_;
 }
+
+static size_t aeadMaxOverhead(SSL*) { return 0; }
+
+static int aeadSeal(SSL* ssl, uint8_t* out, size_t* out_len, size_t max_out_len, const uint8_t* in,
+                    size_t in_len, int id) {
+  TestPrivateKeyConnection* ops = static_cast<TestPrivateKeyConnection*>(SSL_get_ex_data(ssl, id));
+
+  if (!ops) {
+    return ssl_ticket_aead_error;
+  }
+
+  if (ops->test_options_.aead_encryption_error_) {
+    return ssl_ticket_aead_error;
+  }
+
+  if (max_out_len < in_len) {
+    return 0;
+  }
+
+  memset(out, 0, max_out_len);
+
+  // Fake encryption by flipping every byte. A real private key provider might for example call an
+  // underlying HSM chip to perform the encryption.
+  for (size_t i = 0; i < in_len; i++) {
+    out[i] = ~in[i];
+  }
+
+  *out_len = in_len;
+
+  return 1;
+}
+
+static int rsaAeadSeal(SSL* ssl, uint8_t* out, size_t* out_len, size_t max_out_len,
+                       const uint8_t* in, size_t in_len) {
+  return aeadSeal(ssl, out, out_len, max_out_len, in, in_len,
+                  TestPrivateKeyMethodProvider::rsaConnectionIndex());
+}
+
+static int ecdsaAeadSeal(SSL* ssl, uint8_t* out, size_t* out_len, size_t max_out_len,
+                         const uint8_t* in, size_t in_len) {
+  return aeadSeal(ssl, out, out_len, max_out_len, in, in_len,
+                  TestPrivateKeyMethodProvider::ecdsaConnectionIndex());
+}
+
+static enum ssl_ticket_aead_result_t aeadOpen(SSL* ssl, uint8_t* out, size_t* out_len,
+                                              size_t max_out_len, const uint8_t* in, size_t in_len,
+                                              int id) {
+  TestPrivateKeyConnection* ops = static_cast<TestPrivateKeyConnection*>(SSL_get_ex_data(ssl, id));
+
+  if (!ops) {
+    return ssl_ticket_aead_error;
+  }
+
+  if (ops->test_options_.aead_decryption_error_) {
+    return ssl_ticket_aead_error;
+  }
+
+  if (max_out_len < in_len) {
+    return ssl_ticket_aead_error;
+  }
+
+  memset(out, 0, max_out_len);
+
+  // Fake decryption by flipping every byte back.
+  if (!ops->test_options_.aead_bad_decryption_) {
+    for (size_t i = 0; i < in_len; i++) {
+      out[i] = ~in[i];
+    }
+  }
+
+  *out_len = in_len;
+
+  return ssl_ticket_aead_success;
+}
+
+static enum ssl_ticket_aead_result_t rsaAeadOpen(SSL* ssl, uint8_t* out, size_t* out_len, size_t max_out_len,
+                       const uint8_t* in, size_t in_len) {
+  return aeadOpen(ssl, out, out_len, max_out_len, in, in_len,
+                  TestPrivateKeyMethodProvider::rsaConnectionIndex());
+}
+
+static enum ssl_ticket_aead_result_t ecdsaAeadOpen(SSL* ssl, uint8_t* out, size_t* out_len, size_t max_out_len,
+                         const uint8_t* in, size_t in_len) {
+  return aeadOpen(ssl, out, out_len, max_out_len, in, in_len,
+                  TestPrivateKeyMethodProvider::ecdsaConnectionIndex());
+}
+
+Ssl::BoringSslAeadMethodSharedPtr TestPrivateKeyMethodProvider::getBoringSslAeadMethod() {
+  return aead_;
+};
 
 bool TestPrivateKeyMethodProvider::checkFips() {
   if (mode_ == "rsa") {
@@ -313,30 +407,36 @@ TestPrivateKeyMethodProvider::TestPrivateKeyMethodProvider(
     if (value_it.first == "private_key_file" &&
         value.kind_case() == ProtobufWkt::Value::kStringValue) {
       private_key_path = value.string_value();
-    }
-    if (value_it.first == "sync_mode" && value.kind_case() == ProtobufWkt::Value::kBoolValue) {
+    } else if (value_it.first == "sync_mode" &&
+               value.kind_case() == ProtobufWkt::Value::kBoolValue) {
       test_options_.sync_mode_ = value.bool_value();
-    }
-    if (value_it.first == "crypto_error" && value.kind_case() == ProtobufWkt::Value::kBoolValue) {
+    } else if (value_it.first == "crypto_error" &&
+               value.kind_case() == ProtobufWkt::Value::kBoolValue) {
       test_options_.crypto_error_ = value.bool_value();
-    }
-    if (value_it.first == "method_error" && value.kind_case() == ProtobufWkt::Value::kBoolValue) {
+    } else if (value_it.first == "method_error" &&
+               value.kind_case() == ProtobufWkt::Value::kBoolValue) {
       test_options_.method_error_ = value.bool_value();
-    }
-    if (value_it.first == "async_method_error" &&
-        value.kind_case() == ProtobufWkt::Value::kBoolValue) {
+    } else if (value_it.first == "async_method_error" &&
+               value.kind_case() == ProtobufWkt::Value::kBoolValue) {
       test_options_.async_method_error_ = value.bool_value();
-    }
-    if (value_it.first == "expected_operation" &&
-        value.kind_case() == ProtobufWkt::Value::kStringValue) {
+    } else if (value_it.first == "expected_operation" &&
+               value.kind_case() == ProtobufWkt::Value::kStringValue) {
       if (value.string_value() == "decrypt") {
         test_options_.decrypt_expected_ = true;
       } else if (value.string_value() == "sign") {
         test_options_.sign_expected_ = true;
       }
-    }
-    if (value_it.first == "mode" && value.kind_case() == ProtobufWkt::Value::kStringValue) {
+    } else if (value_it.first == "mode" && value.kind_case() == ProtobufWkt::Value::kStringValue) {
       mode_ = value.string_value();
+    } else if (value_it.first == "aead_encryption_error" &&
+               value.kind_case() == ProtobufWkt::Value::kBoolValue) {
+      test_options_.aead_encryption_error_ = value.bool_value();
+    } else if (value_it.first == "aead_decryption_error" &&
+               value.kind_case() == ProtobufWkt::Value::kBoolValue) {
+      test_options_.aead_decryption_error_ = value.bool_value();
+    } else if (value_it.first == "aead_bad_decryption" &&
+               value.kind_case() == ProtobufWkt::Value::kBoolValue) {
+      test_options_.aead_bad_decryption_ = value.bool_value();
     }
   }
 
@@ -349,6 +449,8 @@ TestPrivateKeyMethodProvider::TestPrivateKeyMethodProvider(
   }
 
   method_ = std::make_shared<SSL_PRIVATE_KEY_METHOD>();
+  aead_ = std::make_shared<SSL_TICKET_AEAD_METHOD>();
+  aead_->max_overhead = aeadMaxOverhead;
 
   // Have two modes, "rsa" and "ecdsa", for testing multi-cert use cases.
   if (mode_ == "rsa") {
@@ -358,6 +460,9 @@ TestPrivateKeyMethodProvider::TestPrivateKeyMethodProvider(
     method_->sign = rsaPrivateKeySign;
     method_->decrypt = rsaPrivateKeyDecrypt;
     method_->complete = rsaPrivateKeyComplete;
+
+    aead_->seal = rsaAeadSeal;
+    aead_->open = rsaAeadOpen;
   } else if (mode_ == "ecdsa") {
     if (EVP_PKEY_id(pkey.get()) != EVP_PKEY_EC) {
       throw EnvoyException("Private key is not ECDSA.");
@@ -365,6 +470,9 @@ TestPrivateKeyMethodProvider::TestPrivateKeyMethodProvider(
     method_->sign = ecdsaPrivateKeySign;
     method_->decrypt = ecdsaPrivateKeyDecrypt;
     method_->complete = ecdsaPrivateKeyComplete;
+
+    aead_->seal = ecdsaAeadSeal;
+    aead_->open = ecdsaAeadOpen;
   } else {
     throw EnvoyException("Unknown test provider mode, supported modes are \"rsa\" and \"ecdsa\".");
   }

@@ -130,6 +130,7 @@ public:
   MOCK_METHOD1(unregisterPrivateKeyMethod, void(SSL* ssl));
   MOCK_METHOD0(checkFips, bool());
   MOCK_METHOD0(getBoringSslPrivateKeyMethod, BoringSslPrivateKeyMethodSharedPtr());
+  MOCK_METHOD0(getBoringSslAeadMethod, BoringSslAeadMethodSharedPtr());
 };
 
 } // namespace Ssl

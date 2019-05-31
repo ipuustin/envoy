@@ -30,6 +30,15 @@ struct TestPrivateKeyConnectionTestOptions {
 
   // Return an error from the private key method completion function.
   bool async_method_error_{};
+
+  // Return an error when encrypting the session ticket.
+  bool aead_encryption_error_{};
+
+  // Return an error when decrypting the session ticket.
+  bool aead_decryption_error_{};
+
+  // Perform incorrect decryption.
+  bool aead_bad_decryption_{};
 };
 
 // An example private key method provider for testing the decrypt() and sign()
@@ -68,12 +77,14 @@ public:
   void unregisterPrivateKeyMethod(SSL* ssl) override;
   bool checkFips() override;
   Ssl::BoringSslPrivateKeyMethodSharedPtr getBoringSslPrivateKeyMethod() override;
+  Ssl::BoringSslAeadMethodSharedPtr getBoringSslAeadMethod() override;
 
   static int rsaConnectionIndex();
   static int ecdsaConnectionIndex();
 
 private:
   Ssl::BoringSslPrivateKeyMethodSharedPtr method_{};
+  Ssl::BoringSslAeadMethodSharedPtr aead_{};
   bssl::UniquePtr<EVP_PKEY> pkey_;
   TestPrivateKeyConnectionTestOptions test_options_;
   std::string mode_;

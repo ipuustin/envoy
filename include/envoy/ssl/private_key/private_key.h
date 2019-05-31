@@ -21,6 +21,7 @@ class TransportSocketFactoryContext;
 namespace Ssl {
 
 using BoringSslPrivateKeyMethodSharedPtr = std::shared_ptr<SSL_PRIVATE_KEY_METHOD>;
+using BoringSslAeadMethodSharedPtr = std::shared_ptr<SSL_TICKET_AEAD_METHOD>;
 
 class PrivateKeyMethodProvider {
 public:
@@ -55,6 +56,13 @@ public:
    * configuration.
    */
   virtual BoringSslPrivateKeyMethodSharedPtr getBoringSslPrivateKeyMethod() PURE;
+
+  /**
+   * Get the aead methods from the provider.
+   * @return the aead methods associated with this provider and
+   * configuration. Can be nullptr if no session ticket encryption is required.
+   */
+  virtual BoringSslAeadMethodSharedPtr getBoringSslAeadMethod() PURE;
 };
 
 using PrivateKeyMethodProviderSharedPtr = std::shared_ptr<PrivateKeyMethodProvider>;
