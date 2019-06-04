@@ -174,7 +174,7 @@ Network::IoResult SslSocket::doRead(Buffer::Instance& read_buffer) {
   return {action, bytes_read, end_stream};
 }
 
-void SslSocket::complete() {
+void SslSocket::onPrivateKeyMethodComplete() {
   ASSERT(isThreadSafe());
   ASSERT(async_handshake_in_progress_);
   async_handshake_in_progress_ = false;
