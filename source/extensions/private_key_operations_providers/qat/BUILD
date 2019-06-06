@@ -47,6 +47,7 @@ envoy_cc_library(
     hdrs = ["config.h"],
     deps = [
         ":qat_private_key_provider_lib",
+        "//include/envoy/protobuf:message_validator_interface",
         "//include/envoy/registry",
         "//include/envoy/ssl/private_key:private_key_config_interface",
         "//include/envoy/ssl/private_key:private_key_interface",
