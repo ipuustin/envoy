@@ -34,7 +34,7 @@ void QatPrivateKeyConnection::registerCallback(QatContext* ctx) {
           }
           ctx->setOpStatus(status);
         }
-        this->cb_.complete();
+        this->cb_.onPrivateKeyMethodComplete();
       },
       Event::FileTriggerType::Edge, Event::FileReadyType::Read);
 }
@@ -259,30 +259,39 @@ QatPrivateKeyMethodProvider::getBoringSslPrivateKeyMethod() {
   return method_;
 }
 
-QatPrivateKeyConnection::QatPrivateKeyConnection(SSL* ssl, Ssl::PrivateKeyConnectionCallbacks& cb,
-                                                 Event::Dispatcher& dispatcher, QatHandle& handle,
-                                                 bssl::UniquePtr<EVP_PKEY> pkey)
-    : cb_(cb), dispatcher_(dispatcher), handle_(handle), pkey_(move(pkey)) {
-  SSL_set_ex_data(ssl, QatManager::ssl_qat_connection_index, this);
+bool QatPrivateKeyMethodProvider::checkFips() {
+  RSA* rsa_private_key = EVP_PKEY_get0_RSA(pkey_.get());
+  if (rsa_private_key == nullptr || !RSA_check_fips(rsa_private_key)) {
+    return false;
+  }
+  return true;
 }
 
-Ssl::PrivateKeyConnectionPtr QatPrivateKeyMethodProvider::getPrivateKeyConnection(
-    SSL* ssl, Ssl::PrivateKeyConnectionCallbacks& cb, Event::Dispatcher& dispatcher) {
-  (void)ssl;
+QatPrivateKeyConnection::QatPrivateKeyConnection(Ssl::PrivateKeyConnectionCallbacks& cb,
+                                                 Event::Dispatcher& dispatcher, QatHandle& handle,
+                                                 bssl::UniquePtr<EVP_PKEY> pkey)
+    : cb_(cb), dispatcher_(dispatcher), handle_(handle), pkey_(std::move(pkey)) {}
+
+void QatPrivateKeyMethodProvider::registerPrivateKeyMethod(SSL* ssl,
+                                                           Ssl::PrivateKeyConnectionCallbacks& cb,
+                                                           Event::Dispatcher& dispatcher) {
 
   if (!initialized_ || section_ == nullptr || !section_->isInitialized()) {
-    return nullptr;
+    throw EnvoyException("QAT isn't properly initialized.");
   }
 
   QatHandle& handle = section_->getNextHandle();
 
-  bssl::UniquePtr<BIO> bio(
-      BIO_new_mem_buf(const_cast<char*>(private_key_.data()), private_key_.size()));
-  bssl::UniquePtr<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
-  if (pkey == nullptr) {
-    return nullptr;
-  }
-  return std::make_unique<QatPrivateKeyConnection>(ssl, cb, dispatcher, handle, move(pkey));
+  QatPrivateKeyConnection* ops =
+      new QatPrivateKeyConnection(cb, dispatcher, handle, bssl::UpRef(pkey_));
+  SSL_set_ex_data(ssl, QatManager::ssl_qat_connection_index, ops);
+}
+
+void QatPrivateKeyMethodProvider::unregisterPrivateKeyMethod(SSL* ssl) {
+  QatPrivateKeyConnection* ops = static_cast<QatPrivateKeyConnection*>(
+      SSL_get_ex_data(ssl, QatManager::ssl_qat_connection_index));
+  SSL_set_ex_data(ssl, QatManager::ssl_qat_connection_index, nullptr);
+  delete ops;
 }
 
 QatPrivateKeyMethodProvider::QatPrivateKeyMethodProvider(
@@ -296,12 +305,15 @@ QatPrivateKeyMethodProvider::QatPrivateKeyMethodProvider(
 
   section_name_ = conf.section_name();
   poll_delay_ = conf.poll_delay();
-  private_key_ = factory_context.api().fileSystem().fileReadToEnd(conf.private_key());
+  std::string private_key = factory_context.api().fileSystem().fileReadToEnd(conf.private_key());
 
-  method_ = std::make_shared<SSL_PRIVATE_KEY_METHOD>();
-  method_->sign = privateKeySign;
-  method_->decrypt = privateKeyDecrypt;
-  method_->complete = privateKeyComplete;
+  bssl::UniquePtr<BIO> bio(
+      BIO_new_mem_buf(const_cast<char*>(private_key.data()), private_key.size()));
+  bssl::UniquePtr<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
+  if (pkey == nullptr) {
+    throw EnvoyException("Failed to read private key from disk.");
+  }
+  pkey_ = std::move(pkey);
 
   std::shared_ptr<QatSection> section = manager_->findSection(section_name_);
   if (section != nullptr) {
@@ -310,9 +322,15 @@ QatPrivateKeyMethodProvider::QatPrivateKeyMethodProvider(
     section_ = manager_->addSection(section_name_);
     if (section_ != nullptr && section_->startSection(api_, poll_delay_)) {
       initialized_ = true;
+    } else {
+      throw EnvoyException("No QAT section name found.");
     }
-    // Else no private key connection intance will be returned later.
   }
+
+  method_ = std::make_shared<SSL_PRIVATE_KEY_METHOD>();
+  method_->sign = privateKeySign;
+  method_->decrypt = privateKeyDecrypt;
+  method_->complete = privateKeyComplete;
 }
 
 } // namespace PrivateKeyMethodProviders

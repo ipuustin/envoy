@@ -5,6 +5,7 @@
 #include "envoy/registry/registry.h"
 
 #include "common/config/utility.h"
+#include "common/protobuf/message_validator_impl.h"
 #include "common/protobuf/utility.h"
 
 #include "source/extensions/private_key_operations_providers/qat/qat.pb.h"
@@ -24,6 +25,7 @@ QatPrivateKeyMethodFactory::createPrivateKeyMethodProviderInstance(
   ProtobufTypes::MessagePtr proto_config = std::make_unique<qat::QatPrivateKeyMethodConfig>();
 
   Config::Utility::translateOpaqueConfig(message.typed_config(), ProtobufWkt::Struct(),
+                                         ProtobufMessage::getNullValidationVisitor(),
                                          *proto_config);
   const qat::QatPrivateKeyMethodConfig conf =
       MessageUtil::downcastAndValidate<const qat::QatPrivateKeyMethodConfig&>(*proto_config);
