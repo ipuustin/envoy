@@ -13,11 +13,10 @@ namespace Envoy {
 namespace Extensions {
 namespace PrivateKeyMethodProviders {
 
-class QatPrivateKeyConnection : public virtual Ssl::PrivateKeyConnection {
+class QatPrivateKeyConnection {
 public:
-  QatPrivateKeyConnection(SSL* ssl, Ssl::PrivateKeyConnectionCallbacks& cb,
-                          Event::Dispatcher& dispatcher, QatHandle& handle,
-                          bssl::UniquePtr<EVP_PKEY> pkey);
+  QatPrivateKeyConnection(Ssl::PrivateKeyConnectionCallbacks& cb, Event::Dispatcher& dispatcher,
+                          QatHandle& handle, bssl::UniquePtr<EVP_PKEY> pkey);
 
   void registerCallback(QatContext* ctx);
   void unregisterCallback();
@@ -38,9 +37,10 @@ public:
       const qat::QatPrivateKeyMethodConfig& config,
       Server::Configuration::TransportSocketFactoryContext& private_key_provider_context);
   // Ssl::PrivateKeyMethodProvider
-  Ssl::PrivateKeyConnectionPtr getPrivateKeyConnection(SSL* ssl,
-                                                       Ssl::PrivateKeyConnectionCallbacks& cb,
-                                                       Event::Dispatcher& dispatcher) override;
+  void registerPrivateKeyMethod(SSL* ssl, Ssl::PrivateKeyConnectionCallbacks& cb,
+                                Event::Dispatcher& dispatcher) override;
+  void unregisterPrivateKeyMethod(SSL* ssl);
+  bool checkFips() override;
   Ssl::BoringSslPrivateKeyMethodSharedPtr getBoringSslPrivateKeyMethod() override;
 
 private:
@@ -48,10 +48,10 @@ private:
   std::shared_ptr<QatManager> manager_;
   std::shared_ptr<QatSection> section_;
   std::string section_name_;
-  std::string private_key_;
   uint32_t poll_delay_;
   bool initialized_{};
   Api::Api& api_;
+  bssl::UniquePtr<EVP_PKEY> pkey_;
 };
 
 } // namespace PrivateKeyMethodProviders
