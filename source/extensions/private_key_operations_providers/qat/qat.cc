@@ -153,8 +153,7 @@ std::shared_ptr<QatSection> QatManager::findSection(std::string name) {
 
 std::shared_ptr<QatSection> QatManager::addSection(std::string name) {
   std::shared_ptr<QatSection> section = std::make_shared<QatSection>(name);
-
-  section_map_.insert(std::make_pair(name, section)).first;
+  section_map_[name] = section;
   return section;
 }
 
