@@ -8,7 +8,7 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace PrivateKeyMethodProviders {
+namespace PrivateKeyMethodProvider {
 
 class QatPrivateKeyMethodFactory : public Ssl::PrivateKeyMethodProviderInstanceFactory {
   // Ssl::PrivateKeyMethodProviderInstanceFactory
@@ -18,6 +18,6 @@ class QatPrivateKeyMethodFactory : public Ssl::PrivateKeyMethodProviderInstanceF
 
   std::string name() const { return "qat"; };
 };
-} // namespace PrivateKeyMethodProviders
+} // namespace PrivateKeyMethodProvider
 } // namespace Extensions
 } // namespace Envoy
