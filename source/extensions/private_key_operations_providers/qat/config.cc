@@ -19,7 +19,7 @@ namespace PrivateKeyMethodProviders {
 
 Ssl::PrivateKeyMethodProviderSharedPtr
 QatPrivateKeyMethodFactory::createPrivateKeyMethodProviderInstance(
-    const envoy::api::v2::auth::PrivateKeyMethod& message,
+    const envoy::api::v2::auth::PrivateKeyProvider& message,
     Server::Configuration::TransportSocketFactoryContext& private_key_provider_context) {
   (void)private_key_provider_context;
   ProtobufTypes::MessagePtr proto_config = std::make_unique<qat::QatPrivateKeyMethodConfig>();
