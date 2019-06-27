@@ -205,7 +205,6 @@ static ssl_private_key_result_t privateKeyComplete(SSL* ssl, uint8_t* out, size_
   QatContext* qat_ctx =
       static_cast<QatContext*>(SSL_get_ex_data(ssl, QatManager::ssl_qat_context_index));
 
-  // In principle this shouldn't be possible.
   if (!qat_ctx) {
     return ssl_private_key_failure;
   }
@@ -216,15 +215,15 @@ static ssl_private_key_result_t privateKeyComplete(SSL* ssl, uint8_t* out, size_
     return ssl_private_key_retry;
   }
 
+  // If this point is reached, the QAT processing must be complete. We are allowed to delete the
+  // qat_ctx now without fear of the polling thread trying to use it.
+
   QatPrivateKeyConnection* ops = static_cast<QatPrivateKeyConnection*>(
       SSL_get_ex_data(ssl, QatManager::ssl_qat_connection_index));
 
   if (!ops) {
     return ssl_private_key_failure;
   }
-
-  // If this point is reached, the QAT processing must be complete. We are allowed to delete the
-  // qat_ctx now without fear of the polling thread trying to use it.
 
   // Unregister the callback to prevent it from being called again when the pipe is closed.
   ops->unregisterCallback();
@@ -276,6 +275,11 @@ void QatPrivateKeyMethodProvider::registerPrivateKeyMethod(SSL* ssl,
     throw EnvoyException("QAT isn't properly initialized.");
   }
 
+  if (SSL_get_ex_data(ssl, QatManager::ssl_qat_connection_index) != nullptr) {
+    throw EnvoyException(
+        "Registering the QAT provider twice for same context is not yet supported.");
+  }
+
   QatHandle& handle = section_->getNextHandle();
 
   QatPrivateKeyConnection* ops =
@@ -308,6 +312,9 @@ QatPrivateKeyMethodProvider::QatPrivateKeyMethodProvider(
   bssl::UniquePtr<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
   if (pkey == nullptr) {
     throw EnvoyException("Failed to read private key from disk.");
+  }
+  if (EVP_PKEY_id(pkey.get()) != EVP_PKEY_RSA) {
+    throw EnvoyException("Only RSA keys are supported.");
   }
   pkey_ = std::move(pkey);
 
