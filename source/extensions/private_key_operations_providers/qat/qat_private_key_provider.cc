@@ -11,7 +11,7 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace PrivateKeyMethodProviders {
+namespace PrivateKeyMethodProvider {
 
 SINGLETON_MANAGER_REGISTRATION(qat_manager);
 
@@ -333,6 +333,6 @@ QatPrivateKeyMethodProvider::QatPrivateKeyMethodProvider(
   method_->complete = privateKeyComplete;
 }
 
-} // namespace PrivateKeyMethodProviders
+} // namespace PrivateKeyMethodProvider
 } // namespace Extensions
 } // namespace Envoy

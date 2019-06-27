@@ -11,7 +11,7 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace PrivateKeyMethodProviders {
+namespace PrivateKeyMethodProvider {
 
 class QatPrivateKeyConnection {
 public:
@@ -54,6 +54,6 @@ private:
   bssl::UniquePtr<EVP_PKEY> pkey_;
 };
 
-} // namespace PrivateKeyMethodProviders
+} // namespace PrivateKeyMethodProvider
 } // namespace Extensions
 } // namespace Envoy
