@@ -32,6 +32,11 @@ void QatPrivateKeyConnection::registerCallback(QatContext* ctx) {
           if (bytes != sizeof(status)) {
             status = CPA_STATUS_FAIL;
           }
+          if (status == CPA_STATUS_RETRY) {
+            // At this point we are no longer allowed to have the status as "retry", because the
+            // upper levels consider the operation complete.
+            status = CPA_STATUS_FAIL;
+          }
           ctx->setOpStatus(status);
         }
         this->cb_.onPrivateKeyMethodComplete();
@@ -41,14 +46,9 @@ void QatPrivateKeyConnection::registerCallback(QatContext* ctx) {
 
 void QatPrivateKeyConnection::unregisterCallback() { ssl_async_event_ = nullptr; }
 
-static ssl_private_key_result_t privateKeySign(SSL* ssl, uint8_t* out, size_t* out_len,
-                                               size_t max_out, uint16_t signature_algorithm,
-                                               const uint8_t* in, size_t in_len) {
-  // Never return synchronously with signature.
-  (void)out;
-  (void)out_len;
-  (void)max_out;
-
+static ssl_private_key_result_t privateKeySign(SSL* ssl, uint8_t*, size_t*, size_t,
+                                               uint16_t signature_algorithm, const uint8_t* in,
+                                               size_t in_len) {
   RSA* rsa;
   const EVP_MD* md;
   bssl::ScopedEVP_MD_CTX ctx;
@@ -148,13 +148,8 @@ error:
   return ssl_private_key_failure;
 }
 
-static ssl_private_key_result_t privateKeyDecrypt(SSL* ssl, uint8_t* out, size_t* out_len,
-                                                  size_t max_out, const uint8_t* in,
-                                                  size_t in_len) {
-  (void)out;
-  (void)out_len;
-  (void)max_out;
-
+static ssl_private_key_result_t privateKeyDecrypt(SSL* ssl, uint8_t*, size_t*, size_t,
+                                                  const uint8_t* in, size_t in_len) {
   RSA* rsa;
   QatContext* qat_ctx = nullptr;
 
@@ -207,16 +202,10 @@ error:
 static ssl_private_key_result_t privateKeyComplete(SSL* ssl, uint8_t* out, size_t* out_len,
                                                    size_t max_out) {
 
-  QatPrivateKeyConnection* ops = static_cast<QatPrivateKeyConnection*>(
-      SSL_get_ex_data(ssl, QatManager::ssl_qat_connection_index));
-
-  if (!ops) {
-    return ssl_private_key_failure;
-  }
-
   QatContext* qat_ctx =
       static_cast<QatContext*>(SSL_get_ex_data(ssl, QatManager::ssl_qat_context_index));
 
+  // In principle this shouldn't be possible.
   if (!qat_ctx) {
     return ssl_private_key_failure;
   }
@@ -225,6 +214,13 @@ static ssl_private_key_result_t privateKeyComplete(SSL* ssl, uint8_t* out, size_
   // the top-level SSL function too early. The op status is only set from this thread.
   if (qat_ctx->getOpStatus() == CPA_STATUS_RETRY) {
     return ssl_private_key_retry;
+  }
+
+  QatPrivateKeyConnection* ops = static_cast<QatPrivateKeyConnection*>(
+      SSL_get_ex_data(ssl, QatManager::ssl_qat_connection_index));
+
+  if (!ops) {
+    return ssl_private_key_failure;
   }
 
   // If this point is reached, the QAT processing must be complete. We are allowed to delete the
