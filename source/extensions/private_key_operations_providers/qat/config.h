@@ -13,7 +13,7 @@ namespace PrivateKeyMethodProviders {
 class QatPrivateKeyMethodFactory : public Ssl::PrivateKeyMethodProviderInstanceFactory {
   // Ssl::PrivateKeyMethodProviderInstanceFactory
   Ssl::PrivateKeyMethodProviderSharedPtr createPrivateKeyMethodProviderInstance(
-      const envoy::api::v2::auth::PrivateKeyMethod& message,
+      const envoy::api::v2::auth::PrivateKeyProvider& message,
       Server::Configuration::TransportSocketFactoryContext& private_key_provider_context);
 
   std::string name() const { return "qat"; };
