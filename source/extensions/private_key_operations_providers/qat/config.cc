@@ -15,7 +15,7 @@
 
 namespace Envoy {
 namespace Extensions {
-namespace PrivateKeyMethodProviders {
+namespace PrivateKeyMethodProvider {
 
 Ssl::PrivateKeyMethodProviderSharedPtr
 QatPrivateKeyMethodFactory::createPrivateKeyMethodProviderInstance(
@@ -35,6 +35,6 @@ QatPrivateKeyMethodFactory::createPrivateKeyMethodProviderInstance(
 
 REGISTER_FACTORY(QatPrivateKeyMethodFactory, Ssl::PrivateKeyMethodProviderInstanceFactory);
 
-} // namespace PrivateKeyMethodProviders
+} // namespace PrivateKeyMethodProvider
 } // namespace Extensions
 } // namespace Envoy
