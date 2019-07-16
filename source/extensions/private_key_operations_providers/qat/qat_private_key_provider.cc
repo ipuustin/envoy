@@ -110,7 +110,7 @@ static ssl_private_key_result_t privateKeySign(SSL* ssl, uint8_t*, size_t*, size
     goto error;
   }
 
-  // Addd RSA padding to the the hash. Supported types are PSS and PKCS1.
+  // Add RSA padding to the the hash. Supported types are PSS and PKCS1.
   if (SSL_is_signature_algorithm_rsa_pss(signature_algorithm)) {
     msg_len = RSA_size(rsa);
     msg = static_cast<uint8_t*>(OPENSSL_malloc(msg_len));

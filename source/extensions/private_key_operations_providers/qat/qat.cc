@@ -370,7 +370,7 @@ bool QatContext::decrypt(int len, const unsigned char* from, RSA* rsa, int paddi
   CpaCyRsaDecryptOpData* op_data = nullptr;
   CpaFlatBuffer* out_buf = nullptr;
 
-  // TODO(ipuustin): shuld this rather be a class function?
+  // TODO(ipuustin): should this rather be a class function?
   ret = buildDecryptOpBuf(len, from, rsa, padding, &op_data, &out_buf, 1);
   if (!ret) {
     return false;
