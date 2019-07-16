@@ -47,6 +47,8 @@ cc_library(
     srcs = glob([
         "quickassist/lookaside/access_layer/src/qat_direct/src/*.c",
         "quickassist/lookaside/access_layer/src/qat_direct/src/*.h",
+        "quickassist/lookaside/access_layer/src/common/include/*.h",
+        "quickassist/include/lac/*.h",
     ]) + QAT_COMMON_HEADERS,
     hdrs = glob([
         "quickassist/lookaside/access_layer/src/qat_direct/include/*.h",
@@ -100,7 +102,7 @@ QAT_LAC_SRCS = glob([
     "quickassist/lookaside/access_layer/src/common/crypto/sym/include/*.h",
     "quickassist/lookaside/firmware/include/*.h",
     "quickassist/include/dc/*.h",
-    "quickassist/include/lac/*h",
+    "quickassist/include/lac/*.h",
 ]) + QAT_COMMON_HEADERS
 
 # remove stubs from build

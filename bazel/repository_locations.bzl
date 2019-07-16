@@ -1063,7 +1063,7 @@ REPOSITORY_LOCATIONS_SPEC = dict(
         cpe = "N/A",
     ),
     com_intel_qat = dict(
-        sha256 = "c42a3afc1a5c76d441eaca8b97dc1f9ee64939ec001539ee1a2f3b39b7543c8e",
-        urls = ["https://01.org/sites/default/files/downloads//qat1.7.l.4.5.0-00034.tar.gz"],
+        sha256 = "8381567a11766ab89e556a41aad9a71031209f68b27ae0c49ff59757661162f4",
+        urls = ["https://01.org/sites/default/files/downloads//qat1.7.l.4.6.0-00025.tar.gz"],
     ),
 )
