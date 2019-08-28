@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "envoy/registry/registry.h"
+#include "envoy/server/transport_socket_config.h"
 
 #include "common/config/utility.h"
 #include "common/protobuf/message_validator_impl.h"
@@ -28,7 +29,8 @@ QatPrivateKeyMethodFactory::createPrivateKeyMethodProviderInstance(
                                          ProtobufMessage::getNullValidationVisitor(),
                                          *proto_config);
   const qat::QatPrivateKeyMethodConfig conf =
-      MessageUtil::downcastAndValidate<const qat::QatPrivateKeyMethodConfig&>(*proto_config);
+      MessageUtil::downcastAndValidate<const qat::QatPrivateKeyMethodConfig&>(
+          *proto_config, private_key_provider_context.messageValidationVisitor());
 
   return std::make_shared<QatPrivateKeyMethodProvider>(conf, private_key_provider_context);
 }
