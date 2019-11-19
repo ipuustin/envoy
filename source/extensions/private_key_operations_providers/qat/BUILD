@@ -5,13 +5,9 @@ load(
     "envoy_cc_library",
     "envoy_package",
 )
-load("@envoy_api//bazel:api_build_system.bzl", "api_go_proto_library", "api_proto_library_internal")
+load("@envoy_api//bazel:api_build_system.bzl", "api_proto_package")
 
-api_proto_library_internal(
-    name = "qat_private_key_provider_proto",
-    srcs = ["qat.proto"],
-    visibility = ["//visibility:public"],
-)
+api_proto_package()
 
 envoy_package()
 
@@ -27,7 +23,7 @@ envoy_cc_library(
     ],
     external_deps = ["ssl"],
     deps = [
-        ":qat_private_key_provider_proto_cc",
+        ":pkg_cc_proto",
         "//include/envoy/api:api_interface",
         "//include/envoy/event:dispatcher_interface",
         "//include/envoy/registry",

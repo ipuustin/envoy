@@ -11,6 +11,7 @@ namespace Extensions {
 namespace PrivateKeyMethodProvider {
 
 class QatPrivateKeyMethodFactory : public Ssl::PrivateKeyMethodProviderInstanceFactory {
+public:
   // Ssl::PrivateKeyMethodProviderInstanceFactory
   Ssl::PrivateKeyMethodProviderSharedPtr createPrivateKeyMethodProviderInstance(
       const envoy::api::v2::auth::PrivateKeyProvider& message,
