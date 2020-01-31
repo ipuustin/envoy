@@ -2,12 +2,11 @@
 
 #include "envoy/api/api.h"
 #include "envoy/event/dispatcher.h"
+#include "envoy/extensions/private_key_providers/qat/v3/qat.pb.h"
 #include "envoy/ssl/private_key/private_key.h"
 #include "envoy/ssl/private_key/private_key_config.h"
 
-#include "source/extensions/private_key_operations_providers/qat/qat.pb.h"
-
-#include "extensions/private_key_operations_providers/qat/qat.h"
+#include "extensions/private_key_providers/qat/qat.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -34,7 +33,8 @@ private:
 class QatPrivateKeyMethodProvider : public virtual Ssl::PrivateKeyMethodProvider {
 public:
   QatPrivateKeyMethodProvider(
-      const qat::QatPrivateKeyMethodConfig& config,
+      const envoy::extensions::private_key_providers::qat::v3::QatPrivateKeyMethodConfig&
+          config,
       Server::Configuration::TransportSocketFactoryContext& private_key_provider_context);
   // Ssl::PrivateKeyMethodProvider
   void registerPrivateKeyMethod(SSL* ssl, Ssl::PrivateKeyConnectionCallbacks& cb,
