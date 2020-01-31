@@ -31,7 +31,6 @@ envoy_cc_library(
         "//source/common/common:thread_lib",
         "//source/extensions/transport_sockets/tls:utility_lib",
         "@com_intel_qat//:qat",
-        "@envoy_api//envoy/config/core/v3:pkg_cc_proto",
         "@envoy_api//envoy/extensions/private_key_operations_providers/qat/v3:pkg_cc_proto",
     ],
 )
