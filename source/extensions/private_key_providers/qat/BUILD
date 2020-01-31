@@ -2,12 +2,10 @@ licenses(["notice"])  # Apache 2
 
 load(
     "//bazel:envoy_build_system.bzl",
+    "envoy_cc_extension",
     "envoy_cc_library",
     "envoy_package",
 )
-load("@envoy_api//bazel:api_build_system.bzl", "api_proto_package")
-
-api_proto_package()
 
 envoy_package()
 
@@ -23,7 +21,6 @@ envoy_cc_library(
     ],
     external_deps = ["ssl"],
     deps = [
-        ":pkg_cc_proto",
         "//include/envoy/api:api_interface",
         "//include/envoy/event:dispatcher_interface",
         "//include/envoy/registry",
@@ -34,13 +31,15 @@ envoy_cc_library(
         "//source/common/common:thread_lib",
         "//source/extensions/transport_sockets/tls:utility_lib",
         "@com_intel_qat//:qat",
+        "@envoy_api//envoy/extensions/private_key_providers/qat/v3:pkg_cc_proto",
     ],
 )
 
-envoy_cc_library(
+envoy_cc_extension(
     name = "config",
     srcs = ["config.cc"],
     hdrs = ["config.h"],
+    security_posture = "robust_to_untrusted_downstream",
     deps = [
         ":qat_private_key_provider_lib",
         "//include/envoy/protobuf:message_validator_interface",
@@ -49,5 +48,7 @@ envoy_cc_library(
         "//include/envoy/ssl/private_key:private_key_interface",
         "//source/common/config:utility_lib",
         "//source/common/protobuf:utility_lib",
+        "@envoy_api//envoy/config/core/v3:pkg_cc_proto",
+        "@envoy_api//envoy/extensions/private_key_providers/qat/v3:pkg_cc_proto",
     ],
 )

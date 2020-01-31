@@ -1,11 +1,17 @@
-#include "extensions/private_key_operations_providers/qat/qat.h"
+#include "extensions/private_key_providers/qat/qat.h"
 
-#include "rsa/internal.h"
+// Add two function prototypes from rsa/internal.h so that we don't need
+// to import the file.
+extern "C" {
+int RSA_padding_add_PKCS1_type_1(uint8_t*, size_t, const uint8_t*, size_t);
+int RSA_padding_add_none(uint8_t*, size_t, const uint8_t*, size_t);
+}
 
 namespace Envoy {
 namespace Extensions {
 namespace PrivateKeyMethodProvider {
 
+// TODO(ipuustin): CONSTRUCT_ON_FIRST_USE();
 int QatManager::ssl_qat_connection_index = -1;
 int QatManager::ssl_qat_context_index = -1;
 
@@ -292,7 +298,7 @@ bool QatContext::buildDecryptOpBuf(int flen, const unsigned char* from, RSA* rsa
   if (*output_buffer == nullptr) {
     goto error;
   }
-  memset(*output_buffer, 0, sizeof(output_buffer));
+  memset(*output_buffer, 0, sizeof(CpaFlatBuffer));
 
   (*output_buffer)->pData =
       static_cast<Cpa8U*>(qaeMemAllocNUMA(rsa_len, handle_.info_.nodeAffinity, 64));
@@ -338,7 +344,8 @@ static void decrypt_cb(void* pCallbackTag, CpaStatus status, void* pOpData,
 }
 
 QatContext::QatContext(QatHandle& handle)
-    : handle_(handle), last_status_(CPA_STATUS_RETRY), read_fd_(-1), write_fd_(-1) {}
+    : handle_(handle), last_status_(CPA_STATUS_RETRY), decrypted_data_length_(0), read_fd_(-1),
+      write_fd_(-1) {}
 
 QatContext::~QatContext() {
   if (read_fd_ >= 0) {

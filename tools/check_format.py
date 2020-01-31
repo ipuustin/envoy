@@ -160,7 +160,7 @@ UNOWNED_EXTENSIONS = {
   "extensions/filters/network/mongo_proxy",
   "extensions/filters/network/common",
   "extensions/filters/network/common/redis",
-  "extensions/private_key_operations_providers/qat",
+  "extensions/private_key_providers/qat",
 }
 # yapf: enable
 

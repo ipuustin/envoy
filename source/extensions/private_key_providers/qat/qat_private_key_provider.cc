@@ -1,11 +1,11 @@
-#include "extensions/private_key_operations_providers/qat/qat_private_key_provider.h"
+#include "extensions/private_key_providers/qat/qat_private_key_provider.h"
 
 #include <memory>
 
 #include "envoy/registry/registry.h"
 #include "envoy/server/transport_socket_config.h"
 
-#include "extensions/private_key_operations_providers/qat/qat.h"
+#include "extensions/private_key_providers/qat/qat.h"
 
 #include "openssl/ssl.h"
 
@@ -295,7 +295,7 @@ void QatPrivateKeyMethodProvider::unregisterPrivateKeyMethod(SSL* ssl) {
 }
 
 QatPrivateKeyMethodProvider::QatPrivateKeyMethodProvider(
-    const qat::QatPrivateKeyMethodConfig& conf,
+    const envoy::extensions::private_key_providers::qat::v3::QatPrivateKeyMethodConfig& conf,
     Server::Configuration::TransportSocketFactoryContext& factory_context)
     : api_(factory_context.api()) {
 
@@ -313,7 +313,9 @@ QatPrivateKeyMethodProvider::QatPrivateKeyMethodProvider(
   if (pkey == nullptr) {
     throw EnvoyException("Failed to read private key from disk.");
   }
+
   if (EVP_PKEY_id(pkey.get()) != EVP_PKEY_RSA) {
+    // TODO(ipuustin): add support also to ECDSA keys.
     throw EnvoyException("Only RSA keys are supported.");
   }
   pkey_ = std::move(pkey);
