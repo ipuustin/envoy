@@ -1,6 +1,6 @@
 #pragma once
 
-#include "envoy/api/v2/auth/cert.pb.h"
+#include "envoy/extensions/transport_sockets/tls/v3/cert.pb.h"
 #include "envoy/ssl/private_key/private_key.h"
 #include "envoy/ssl/private_key/private_key_config.h"
 
@@ -11,12 +11,12 @@ namespace Extensions {
 namespace PrivateKeyMethodProvider {
 
 class QatPrivateKeyMethodFactory : public Ssl::PrivateKeyMethodProviderInstanceFactory {
-public:
   // Ssl::PrivateKeyMethodProviderInstanceFactory
   Ssl::PrivateKeyMethodProviderSharedPtr createPrivateKeyMethodProviderInstance(
-      const envoy::api::v2::auth::PrivateKeyProvider& message,
+      const envoy::extensions::transport_sockets::tls::v3::PrivateKeyProvider& message,
       Server::Configuration::TransportSocketFactoryContext& private_key_provider_context);
 
+public:
   std::string name() const { return "qat"; };
 };
 } // namespace PrivateKeyMethodProvider
