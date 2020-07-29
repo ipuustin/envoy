@@ -143,6 +143,7 @@ proto_library(
         "//envoy/extensions/resource_monitors/fixed_heap/v3:pkg",
         "//envoy/extensions/resource_monitors/injected_resource/v3:pkg",
         "//envoy/extensions/retry/host/omit_canary_hosts/v3:pkg",
+        "//envoy/extensions/private_key_operations_providers/qat/v3:pkg",
         "//envoy/extensions/retry/host/omit_host_metadata/v3:pkg",
         "//envoy/extensions/retry/host/previous_hosts/v3:pkg",
         "//envoy/extensions/retry/priority/previous_priorities/v3:pkg",
