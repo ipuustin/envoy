@@ -10,6 +10,7 @@ QAT_DEFINES = [
     "-D QAT_UIO=1",
     '-D OS=\\"linux\\"',
     '-D ICP_OS=\\"linux_2.6\\"',
+    '-D OSAL_ENSURE_ON=1',
 ]
 
 QAT_INCLUDE_PATHS = [
@@ -28,7 +29,7 @@ QAT_INCLUDE_PATHS = [
     "-I external/com_intel_qat/quickassist/lookaside/access_layer/src/qat_direct/src/include/transport",
     "-I external/com_intel_qat/quickassist/lookaside/access_layer/src/qat_direct/src/include/platform",
     "-I external/com_intel_qat/quickassist/utilities/libusdm_drv",
-    "-I external/com_intel_qat/quickassist/utilities/libusdm_drv/linux/include",
+    "-I external/com_intel_qat/quickassist/utilities/libusdm_drv/include",
     "-I external/com_intel_qat/quickassist/lookaside/access_layer/src/common/include",
     "-I external/com_intel_qat/quickassist/lookaside/access_layer/src/common/crypto/sym/include",
     "-I external/com_intel_qat/quickassist/lookaside/access_layer/src/common/crypto/asym/include",
@@ -82,13 +83,13 @@ cc_library(
 cc_library(
     name = "usdm_user",
     srcs = glob([
-        "quickassist/utilities/libusdm_drv/linux/user_space/*.c",
-        "quickassist/utilities/libusdm_drv/linux/user_space/*.h",
+        "quickassist/utilities/libusdm_drv/user_space/*.c",
+        "quickassist/utilities/libusdm_drv/user_space/*.h",
         "quickassist/utilities/libusdm_drv/qae_mem.h",
-        "quickassist/utilities/libusdm_drv/linux/user_space/*.h",
+        "quickassist/utilities/libusdm_drv/user_space/*.h",
     ]) + QAT_COMMON_HEADERS,
     hdrs = glob([
-        "quickassist/utilities/libusdm_drv/linux/include/*.h",
+        "quickassist/utilities/libusdm_drv/include/*.h",
         "quickassist/utilities/libusdm_drv/qae_mem.h",
     ]),
     copts = QAT_INCLUDE_PATHS + QAT_DEFINES,
@@ -108,7 +109,7 @@ QAT_LAC_SRCS = glob([
 ]) + QAT_COMMON_HEADERS
 
 # remove stubs from build
-QAT_LAC_SRCS.remove("quickassist/lookaside/access_layer/src/common/crypto/stubs/lac_stubs.c")
+QAT_LAC_SRCS.remove("quickassist/lookaside/access_layer/src/common/stubs/lac_stubs.c")
 
 # remove precomputed values to prevent symbol clash
 QAT_LAC_SRCS.remove("quickassist/lookaside/access_layer/src/common/crypto/sym/lac_sym_hash_hw_precomputes.c")

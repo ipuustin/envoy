@@ -1,7 +1,7 @@
-From 62ccceb550ed5b92a3d8089aeff725419e880da3 Mon Sep 17 00:00:00 2001
+From f32df22f09ccc22a9fee5d50069f740aa147bace Mon Sep 17 00:00:00 2001
 From: Ismo Puustinen <ismo.puustinen@intel.com>
 Date: Fri, 5 Apr 2019 11:13:42 +0300
-Subject: [PATCH 1/4] Add "extern C" to several headers.
+Subject: [PATCH 1/3] Add "extern C" to several headers.
 
 Make sure that icp_sal__{user,poll}.h and qae_mem.h have C linkage to
 make the C++ linker find the corresponding symbols from the object
@@ -13,7 +13,7 @@ files.
  3 files changed, 24 insertions(+)
 
 diff --git a/quickassist/lookaside/access_layer/include/icp_sal_poll.h b/quickassist/lookaside/access_layer/include/icp_sal_poll.h
-index 364601c..b8dc631 100644
+index 91c7690..f4a6114 100644
 --- a/quickassist/lookaside/access_layer/include/icp_sal_poll.h
 +++ b/quickassist/lookaside/access_layer/include/icp_sal_poll.h
 @@ -81,6 +81,10 @@
@@ -27,7 +27,7 @@ index 364601c..b8dc631 100644
  /*************************************************************************
   * @ingroup SalPoll
   * @description
-@@ -469,4 +473,8 @@ CpaStatus icp_sal_DcPutFileDescriptor(CpaInstanceHandle instanceHandle, int fd);
+@@ -474,4 +478,8 @@ CpaStatus icp_sal_DcPutFileDescriptor(CpaInstanceHandle instanceHandle, int fd);
   *****************************************************************************/
  CpaStatus icp_sal_CyPutFileDescriptor(CpaInstanceHandle instanceHandle, int fd);
  
@@ -37,7 +37,7 @@ index 364601c..b8dc631 100644
 +
  #endif
 diff --git a/quickassist/lookaside/access_layer/include/icp_sal_user.h b/quickassist/lookaside/access_layer/include/icp_sal_user.h
-index 05fcbe8..576e562 100644
+index ba1adb7..09344c5 100644
 --- a/quickassist/lookaside/access_layer/include/icp_sal_user.h
 +++ b/quickassist/lookaside/access_layer/include/icp_sal_user.h
 @@ -74,6 +74,10 @@
@@ -61,7 +61,7 @@ index 05fcbe8..576e562 100644
 +
  #endif
 diff --git a/quickassist/utilities/libusdm_drv/qae_mem.h b/quickassist/utilities/libusdm_drv/qae_mem.h
-index 29ef1a3..46e36a4 100644
+index 7bbca2f..2f966ed 100644
 --- a/quickassist/utilities/libusdm_drv/qae_mem.h
 +++ b/quickassist/utilities/libusdm_drv/qae_mem.h
 @@ -70,6 +70,10 @@
@@ -75,7 +75,7 @@ index 29ef1a3..46e36a4 100644
  #ifdef __KERNEL__
  #ifdef __FreeBSD__
  #include <sys/types.h>
-@@ -241,4 +245,8 @@ int qaeMemInitAndReturnFd(int *mem_fd);
+@@ -263,4 +267,8 @@ int qaeMemInitAndReturnFd(int *mem_fd);
  void qaeAtFork(void);
  #endif
  
@@ -85,5 +85,5 @@ index 29ef1a3..46e36a4 100644
 +
  #endif /* #ifndef QAE_MEM_H_ */
 -- 
-2.20.1
+2.26.2
 
