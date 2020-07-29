@@ -26,6 +26,9 @@ CAS
 CB
 CDS
 CEL
+PKCS
+PSS
+QAT
 ceil
 CHACHA
 CHLO
@@ -658,6 +661,7 @@ hotrestart
 hrefs
 huffman
 hystrix
+icp
 idempotency
 idx
 ifdef
@@ -976,6 +980,7 @@ runtime
 runtimes
 rver
 rxhash
+sal
 sandboxed
 sanitization
 sanitizer
