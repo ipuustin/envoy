@@ -482,8 +482,8 @@ DEPENDENCY_REPOSITORIES = dict(
         cpe = "cpe:2.3:a:icu-project:international_components_for_unicode",
     ),
     com_intel_qat = dict(
-        sha256 = "8381567a11766ab89e556a41aad9a71031209f68b27ae0c49ff59757661162f4",
-        urls = ["https://01.org/sites/default/files/downloads//qat1.7.l.4.6.0-00025.tar.gz"],
+        sha256 = "bf777c7194245cb5ad07804847b92b8d149fee603edfbd572addb62c61100df6",
+        urls = ["https://01.org/sites/default/files/downloads//qat1.7.l.4.10.0-00014.tar.gz"],
         use_category = ["dataplane"],
         cpe = "N/A",
     ),
