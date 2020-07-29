@@ -21,6 +21,7 @@ proto_library(
         "//envoy/config/listener/v3:pkg",
         "//envoy/config/metrics/v3:pkg",
         "//envoy/config/overload/v3:pkg",
+        "//envoy/config/private_key_operations_providers/qat:pkg",
         "//envoy/config/ratelimit/v3:pkg",
         "//envoy/config/rbac/v3:pkg",
         "//envoy/config/resource_monitor/fixed_heap/v2alpha:pkg",
