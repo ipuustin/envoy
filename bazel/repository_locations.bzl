@@ -484,5 +484,7 @@ DEPENDENCY_REPOSITORIES = dict(
     com_intel_qat = dict(
         sha256 = "8381567a11766ab89e556a41aad9a71031209f68b27ae0c49ff59757661162f4",
         urls = ["https://01.org/sites/default/files/downloads//qat1.7.l.4.6.0-00025.tar.gz"],
+        use_category = ["dataplane"],
+        cpe = "N/A",
     ),
 )
