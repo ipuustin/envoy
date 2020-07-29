@@ -3,6 +3,7 @@ syntax = "proto3";
 package envoy.config.private_key_operations_providers.qat;
 
 import "udpa/annotations/migrate.proto";
+import "udpa/annotations/status.proto";
 import "validate/validate.proto";
 
 option java_package = "io.envoyproxy.envoy.config.private_key_operations_providers.qat";
@@ -10,6 +11,7 @@ option java_outer_classname = "QatProto";
 option java_multiple_files = true;
 option (udpa.annotations.file_migrate).move_to_package =
     "envoy.extensions.private_key_operations_providers.qat.v3";
+option (udpa.annotations.file_status).package_version_status = ACTIVE;
 
 message QatPrivateKeyMethodConfig {
   string section_name = 1 [(validate.rules).string = {min_bytes: 1}];
