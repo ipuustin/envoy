@@ -33,7 +33,10 @@ EPIPE
 HEXDIG
 HEXDIGIT
 OWS
+PKCS
 Preconnecting
+PSS
+QAT
 RCVBUF
 RTCP
 RTP
@@ -703,6 +706,7 @@ hotrestart
 hrefs
 huffman
 hystrix
+icp
 idempotency
 idx
 ifdef
@@ -1047,6 +1051,7 @@ runtime
 runtimes
 rver
 rxhash
+sal
 sandboxed
 sanitization
 sanitizer
