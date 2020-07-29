@@ -212,7 +212,7 @@ def _boringssl():
         patch_args = ["-p1"],
         patches = [
             "@envoy//bazel:boringssl_static.patch",
-            "@envoy//bazel/external:boringssl-export-syms.patch",
+            # "@envoy//bazel/external:boringssl-export-syms.patch",
         ],
     )
 
@@ -521,9 +521,8 @@ def _com_intel_qat():
         build_file = "@envoy//bazel/external:qat.BUILD",
         patches = [
             "@envoy//bazel/external:0001-Add-extern-C-to-several-headers.patch",
-            "@envoy//bazel/external:0002-cpa_types-do-not-define-TRUE-and-FALSE.patch",
-            "@envoy//bazel/external:0003-Fix-openssl-header-include-paths.patch",
-            "@envoy//bazel/external:0004-Udev-mock-implementation.patch",
+            "@envoy//bazel/external:0002-Fix-openssl-header-include-paths.patch",
+            "@envoy//bazel/external:0003-Udev-mock-implementation.patch",
         ],
         patch_args = ["-p1"],
     )
