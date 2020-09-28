@@ -15,15 +15,12 @@ namespace {
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 inline Envoy::Network::IoHandle* bio_io_handle(BIO* bio) {
-  return reinterpret_cast<Envoy::Network::IoHandle*>(bio->ptr);
+  return reinterpret_cast<Envoy::Network::IoHandle*>(BIO_get_data(bio));
 }
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 int io_handle_new(BIO* bio) {
-  bio->init = 0;
-  bio->num = -1;
-  bio->ptr = nullptr;
-  bio->flags = 0;
+  BIO_reset(bio);
   return 1;
 }
 
@@ -32,14 +29,14 @@ int io_handle_free(BIO* bio) {
   if (bio == nullptr) {
     return 0;
   }
-
-  if (bio->shutdown) {
-    if (bio->init) {
+  if (BIO_get_shutdown(bio)) {
+    if (BIO_get_init(bio)) {
       bio_io_handle(bio)->close();
     }
-    bio->init = 0;
-    bio->flags = 0;
   }
+  BIO_set_init(bio, 0);
+  BIO_set_flags(bio, 0);
+
   return 1;
 }
 
@@ -93,10 +90,10 @@ long io_handle_ctrl(BIO* b, int cmd, long num, void*) {
     RELEASE_ASSERT(false, "should not be called");
     break;
   case BIO_CTRL_GET_CLOSE:
-    ret = b->shutdown;
+    ret = BIO_get_shutdown(b);
     break;
   case BIO_CTRL_SET_CLOSE:
-    b->shutdown = int(num);
+    BIO_set_shutdown(b, int(num));
     break;
   case BIO_CTRL_FLUSH:
     ret = 1;
@@ -108,16 +105,16 @@ long io_handle_ctrl(BIO* b, int cmd, long num, void*) {
   return ret;
 }
 
-const BIO_METHOD methods_io_handlep = {
-    BIO_TYPE_SOCKET,    "io_handle",
-    io_handle_write,    io_handle_read,
-    nullptr /* puts */, nullptr /* gets, */,
-    io_handle_ctrl,     io_handle_new,
-    io_handle_free,     nullptr /* callback_ctrl */,
-};
-
 // NOLINTNEXTLINE(readability-identifier-naming)
-const BIO_METHOD* BIO_s_io_handle(void) { return &methods_io_handlep; }
+const BIO_METHOD* BIO_s_io_handle(void) {
+  BIO_METHOD* methods = BIO_meth_new(BIO_TYPE_SOCKET, "io_handle");
+  BIO_meth_set_write(methods, io_handle_write);
+  BIO_meth_set_read(methods, io_handle_read);
+  BIO_meth_set_ctrl(methods, io_handle_ctrl);
+  BIO_meth_set_create(methods, io_handle_new);
+  BIO_meth_set_destroy(methods, io_handle_free);
+  return methods;
+}
 
 } // namespace
 
@@ -129,10 +126,9 @@ BIO* BIO_new_io_handle(Envoy::Network::IoHandle* io_handle) {
   RELEASE_ASSERT(b != nullptr, "");
 
   // Initialize the BIO
-  b->num = -1;
-  b->ptr = io_handle;
-  b->shutdown = 0;
-  b->init = 1;
+  BIO_set_data(b, io_handle);
+  BIO_set_shutdown(b, 0);
+  BIO_set_init(b, 1);
 
   return b;
 }

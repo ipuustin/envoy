@@ -11,8 +11,8 @@
 
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
+#include "boringssl_compat/cbs.h"
 #include "openssl/bn.h"
-#include "openssl/bytestring.h"
 #include "openssl/ssl.h"
 
 namespace Envoy {
@@ -33,7 +33,8 @@ template <typename T> using ParsingResult = absl::variant<T, absl::string_view>;
  * Construct a `T` from the data contained in the CBS&. Functions
  * of this type must advance the input CBS& over the element.
  */
-template <typename T> using Asn1ParsingFunc = std::function<ParsingResult<T>(CBS&)>;
+template <typename T>
+using Asn1ParsingFunc = std::function<ParsingResult<T>(Envoy::Extensions::Common::Cbs::CBS&)>;
 
 /**
  * Utility functions for parsing DER-encoded `ASN.1` objects.
@@ -63,7 +64,7 @@ public:
    * @param `cbs` a CBS& that refers to the current document position
    * @returns absl::string_view containing the contents of `cbs`
    */
-  static absl::string_view cbsToString(CBS& cbs);
+  static absl::string_view cbsToString(Envoy::Extensions::Common::Cbs::CBS& cbs);
 
   /**
    * Parses all elements of an `ASN.1` SEQUENCE OF. `parse_element` must
@@ -76,7 +77,8 @@ public:
    * SEQUENCE OF object.
    */
   template <typename T>
-  static ParsingResult<std::vector<T>> parseSequenceOf(CBS& cbs, Asn1ParsingFunc<T> parse_element);
+  static ParsingResult<std::vector<T>> parseSequenceOf(Envoy::Extensions::Common::Cbs::CBS& cbs,
+                                                       Asn1ParsingFunc<T> parse_element);
 
   /**
    * Checks if an explicitly tagged optional element of `tag` is present and
@@ -89,7 +91,8 @@ public:
    * nullopt if the element has a different tag, or an error string if parsing fails.
    */
   template <typename T>
-  static ParsingResult<absl::optional<T>> parseOptional(CBS& cbs, Asn1ParsingFunc<T> parse_data,
+  static ParsingResult<absl::optional<T>> parseOptional(Envoy::Extensions::Common::Cbs::CBS& cbs,
+                                                        Asn1ParsingFunc<T> parse_data,
                                                         unsigned tag);
 
   /**
@@ -104,14 +107,15 @@ public:
    * @returns ParsingResult<bool> whether `cbs` points to an element tagged with `tag` or
    * an error string if parsing fails.
    */
-  static ParsingResult<absl::optional<CBS>> getOptional(CBS& cbs, unsigned tag);
+  static ParsingResult<absl::optional<Envoy::Extensions::Common::Cbs::CBS>>
+  getOptional(Envoy::Extensions::Common::Cbs::CBS& cbs, unsigned tag);
 
   /**
    * @param cbs a CBS& that refers to an `ASN.1` OBJECT IDENTIFIER element
    * @returns ParsingResult<std::string> the `OID` encoded in `cbs` or an error
    * string if `cbs` does not point to a well-formed OBJECT IDENTIFIER
    */
-  static ParsingResult<std::string> parseOid(CBS& cbs);
+  static ParsingResult<std::string> parseOid(Envoy::Extensions::Common::Cbs::CBS& cbs);
 
   /**
    * @param cbs a CBS& that refers to an `ASN.1` `GENERALIZEDTIME` element
@@ -119,7 +123,8 @@ public:
    * or an error string if `cbs` does not point to a well-formed
    * `GENERALIZEDTIME`
    */
-  static ParsingResult<Envoy::SystemTime> parseGeneralizedTime(CBS& cbs);
+  static ParsingResult<Envoy::SystemTime>
+  parseGeneralizedTime(Envoy::Extensions::Common::Cbs::CBS& cbs);
 
   /**
    * Parses an `ASN.1` INTEGER type into its hex string representation.
@@ -131,14 +136,15 @@ public:
    * @returns ParsingResult<std::string> a hex representation of the integer
    * or an error string if `cbs` does not point to a well-formed INTEGER
    */
-  static ParsingResult<std::string> parseInteger(CBS& cbs);
+  static ParsingResult<std::string> parseInteger(Envoy::Extensions::Common::Cbs::CBS& cbs);
 
   /**
    * @param cbs a CBS& that refers to an `ASN.1` `OCTETSTRING` element
    * @returns ParsingResult<std::vector<uint8_t>> the octets in `cbs` or
    * an error string if `cbs` does not point to a well-formed `OCTETSTRING`
    */
-  static ParsingResult<std::vector<uint8_t>> parseOctetString(CBS& cbs);
+  static ParsingResult<std::vector<uint8_t>>
+  parseOctetString(Envoy::Extensions::Common::Cbs::CBS& cbs);
 
   /**
    * Advance `cbs` over an `ASN.1` value of the class `tag` if that
@@ -149,7 +155,8 @@ public:
    * @returns `ParsingResult<absl::monostate>` a unit type denoting success
    * or an error string if parsing fails.
    */
-  static ParsingResult<absl::monostate> skipOptional(CBS& cbs, unsigned tag);
+  static ParsingResult<absl::monostate> skipOptional(Envoy::Extensions::Common::Cbs::CBS& cbs,
+                                                     unsigned tag);
 
   /**
    * Advance `cbs` over an `ASN.1` value of the class `tag`.
@@ -159,13 +166,14 @@ public:
    * @returns `ParsingResult<absl::monostate>` a unit type denoting success
    * or an error string if parsing fails.
    */
-  static ParsingResult<absl::monostate> skip(CBS& cbs, unsigned tag);
+  static ParsingResult<absl::monostate> skip(Envoy::Extensions::Common::Cbs::CBS& cbs,
+                                             unsigned tag);
 };
 
 template <typename T>
-ParsingResult<std::vector<T>> Asn1Utility::parseSequenceOf(CBS& cbs,
+ParsingResult<std::vector<T>> Asn1Utility::parseSequenceOf(Envoy::Extensions::Common::Cbs::CBS& cbs,
                                                            Asn1ParsingFunc<T> parse_element) {
-  CBS seq_elem;
+  Envoy::Extensions::Common::Cbs::CBS seq_elem;
   std::vector<T> vec;
 
   // Initialize seq_elem to first element in sequence.
@@ -190,15 +198,16 @@ ParsingResult<std::vector<T>> Asn1Utility::parseSequenceOf(CBS& cbs,
 }
 
 template <typename T>
-ParsingResult<absl::optional<T>> Asn1Utility::parseOptional(CBS& cbs, Asn1ParsingFunc<T> parse_data,
-                                                            unsigned tag) {
+ParsingResult<absl::optional<T>>
+Asn1Utility::parseOptional(Envoy::Extensions::Common::Cbs::CBS& cbs, Asn1ParsingFunc<T> parse_data,
+                           unsigned tag) {
   auto maybe_data_res = getOptional(cbs, tag);
 
   if (absl::holds_alternative<absl::string_view>(maybe_data_res)) {
     return absl::get<absl::string_view>(maybe_data_res);
   }
 
-  auto maybe_data = absl::get<absl::optional<CBS>>(maybe_data_res);
+  auto maybe_data = absl::get<absl::optional<Envoy::Extensions::Common::Cbs::CBS>>(maybe_data_res);
   if (maybe_data) {
     auto res = parse_data(maybe_data.value());
     if (absl::holds_alternative<T>(res)) {

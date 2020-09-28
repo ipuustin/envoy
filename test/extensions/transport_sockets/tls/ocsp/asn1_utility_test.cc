@@ -20,7 +20,7 @@ public:
   // DER encoding of a single TLV `ASN.1` element.
   // returns a pointer to the underlying buffer and transfers
   // ownership to the caller.
-  uint8_t* asn1Encode(CBS& cbs, std::string& value, unsigned tag) {
+  uint8_t* asn1Encode(Envoy::Extensions::Common::Cbs::CBS& cbs, std::string& value, unsigned tag) {
     bssl::ScopedCBB cbb;
     CBB child;
     auto data_head = reinterpret_cast<const uint8_t*>(value.c_str());
@@ -38,7 +38,8 @@ public:
   }
 
   template <typename T>
-  void expectParseResultErrorOnWrongTag(std::function<ParsingResult<T>(CBS&)> parse) {
+  void expectParseResultErrorOnWrongTag(
+      std::function<ParsingResult<T>(Envoy::Extensions::Common::Cbs::CBS&)> parse) {
     CBS cbs;
     CBS_init(&cbs, asn1_true.data(), asn1_true.size());
     EXPECT_NO_THROW(absl::get<1>(parse(cbs)));
@@ -49,9 +50,11 @@ public:
 };
 
 TEST_F(Asn1UtilityTest, ParseMethodsWrongTagTest) {
-  expectParseResultErrorOnWrongTag<std::vector<std::vector<uint8_t>>>([](CBS& cbs) {
-    return Asn1Utility::parseSequenceOf<std::vector<uint8_t>>(cbs, Asn1Utility::parseOctetString);
-  });
+  expectParseResultErrorOnWrongTag<std::vector<std::vector<uint8_t>>>(
+      [](Envoy::Extensions::Common::Cbs::CBS& cbs) {
+        return Asn1Utility::parseSequenceOf<std::vector<uint8_t>>(cbs,
+                                                                  Asn1Utility::parseOctetString);
+      });
   expectParseResultErrorOnWrongTag<std::string>(Asn1Utility::parseOid);
   expectParseResultErrorOnWrongTag<Envoy::SystemTime>(Asn1Utility::parseGeneralizedTime);
   expectParseResultErrorOnWrongTag<std::string>(Asn1Utility::parseInteger);
@@ -174,13 +177,13 @@ TEST_F(Asn1UtilityTest, ParseOptionalTest) {
   std::vector<uint8_t> explicit_optional_true = {0, 3, 0x1u, 1, 0xff};
   std::vector<uint8_t> missing_val_bool = {0x1u, 1};
 
-  auto parse_bool = [](CBS& cbs) -> bool {
+  auto parse_bool = [](Envoy::Extensions::Common::Cbs::CBS& cbs) -> bool {
     int res;
     CBS_get_asn1_bool(&cbs, &res);
     return res;
   };
 
-  auto parse_bool_fail = [](CBS&) -> ParsingResult<bool> {
+  auto parse_bool_fail = [](Envoy::Extensions::Common::Cbs::CBS&) -> ParsingResult<bool> {
     std::cout << "failing" << std::endl;
     return absl::string_view{"failed"};
   };

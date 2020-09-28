@@ -1,5 +1,6 @@
 #include "extensions/transport_sockets/tls/ssl_socket.h"
 
+#include "envoy/event/dispatcher.h"
 #include "envoy/stats/scope.h"
 
 #include "common/common/assert.h"
@@ -17,6 +18,8 @@
 #include "openssl/x509v3.h"
 
 using Envoy::Network::PostIoAction;
+
+#define SSL_ERROR_WANT_PRIVATE_KEY_OPERATION 13
 
 namespace Envoy {
 namespace Extensions {
@@ -60,6 +63,8 @@ SslSocket::SslSocket(Envoy::Ssl::ContextSharedPtr ctx, InitialState state,
     ASSERT(state == InitialState::Server);
     SSL_set_accept_state(rawSsl());
   }
+
+  SSL_set_mode(rawSsl(), SSL_MODE_ASYNC);
 }
 
 void SslSocket::setTransportSocketCallbacks(Network::TransportSocketCallbacks& callbacks) {
@@ -172,7 +177,7 @@ Network::IoResult SslSocket::doRead(Buffer::Instance& read_buffer) {
     }
   }
 
-  ENVOY_CONN_LOG(trace, "ssl read {} bytes", callbacks_->connection(), bytes_read);
+  ENVOY_CONN_LOG(trace, "ssl read {} bytes into", callbacks_->connection(), bytes_read);
 
   return {action, bytes_read, end_stream};
 }
@@ -289,6 +294,13 @@ void SslSocket::onConnected() { ASSERT(info_->state() == Ssl::SocketState::PreHa
 
 Ssl::ConnectionInfoConstSharedPtr SslSocket::ssl() const { return info_; }
 
+// SslHolder defers SSL_free() calls by keeping a reference to SslSocketInfo until there's no
+// pending async job and it's safe to delete it.
+struct SslHolder {
+  Ssl::ConnectionInfoConstSharedPtr info_;
+  Event::FileEventPtr file_event_;
+};
+
 void SslSocket::shutdownSsl() {
   ASSERT(info_->state() != Ssl::SocketState::PreHandshake);
   if (info_->state() != Ssl::SocketState::ShutdownSent &&
@@ -308,6 +320,47 @@ void SslSocket::shutdownSsl() {
     ENVOY_CONN_LOG(debug, "SSL shutdown: rc={}", callbacks_->connection(), rc);
     drainErrorQueue();
     info_->setState(Ssl::SocketState::ShutdownSent);
+
+    // If we let the SSL socket be destroyed while there is a pending async SSL operation
+    // then the callback handler will use already freed memory. Hence defer its deleting.
+    if (SSL_waiting_for_async(rawSsl())) {
+      OSSL_ASYNC_FD* fds;
+      size_t numfds;
+
+      int rc = SSL_get_all_async_fds(rawSsl(), NULL, &numfds);
+      if (rc == 0) {
+        return;
+      }
+
+      if (numfds != 1) {
+        ENVOY_LOG(error, "Only one async OpenSSL engine is supported currently");
+        return;
+      }
+
+      fds = static_cast<OSSL_ASYNC_FD*>(malloc(numfds * sizeof(OSSL_ASYNC_FD)));
+      if (fds == NULL) {
+        return;
+      }
+
+      rc = SSL_get_all_async_fds(rawSsl(), fds, &numfds);
+      if (rc == 0) {
+        free(fds);
+        return;
+      }
+
+      SslStats& stats = ctx_->stats();
+      SslHolder* holder = new SslHolder;
+      holder->info_ = info_;
+      holder->file_event_ = callbacks_->connection().dispatcher().createFileEvent(
+          fds[0],
+          [holder, &stats](uint32_t /* events */) -> void {
+            stats.fail_async_premature_disconnect_.inc();
+            delete holder;
+          },
+          Event::FileTriggerType::Edge, Event::FileReadyType::Read);
+      free(fds);
+      ENVOY_CONN_LOG(info, "Postponed deleting SSL", callbacks_->connection());
+    }
   }
 }
 

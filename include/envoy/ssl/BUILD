@@ -82,6 +82,7 @@ envoy_cc_library(
     hdrs = ["handshaker.h"],
     external_deps = ["ssl"],
     deps = [
+        "//boringssl_compat:bssl_compat_lib",
         "//include/envoy/api:api_interface",
         "//include/envoy/config:typed_config_interface",
         "//include/envoy/network:connection_interface",

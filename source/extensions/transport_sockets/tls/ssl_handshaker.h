@@ -76,6 +76,7 @@ public:
 
 private:
   Ssl::HandshakeCallbacks* handshake_callbacks_;
+  void asyncCb();
 
   Ssl::SocketState state_;
   mutable std::vector<std::string> cached_uri_san_local_certificate_;
@@ -93,6 +94,7 @@ private:
   mutable std::string cached_session_id_;
   mutable std::string cached_tls_version_;
   mutable SslExtendedSocketInfoImpl extended_socket_info_;
+  mutable Event::FileEventPtr file_event_;
 };
 
 using SslHandshakerImplSharedPtr = std::shared_ptr<SslHandshakerImpl>;

@@ -9,7 +9,6 @@
 
 #include "extensions/common/utility.h"
 #include "extensions/filters/common/lua/wrappers.h"
-#include "extensions/filters/http/common/factory_base.h"
 #include "extensions/filters/http/lua/wrappers.h"
 #include "extensions/filters/http/well_known_names.h"
 
@@ -166,8 +165,7 @@ public:
             {"streamInfo", static_luaStreamInfo},
             {"connection", static_luaConnection},
             {"importPublicKey", static_luaImportPublicKey},
-            {"verifySignature", static_luaVerifySignature},
-            {"base64Escape", static_luaBase64Escape}};
+            {"verifySignature", static_luaVerifySignature}};
   }
 
 private:
@@ -270,13 +268,6 @@ private:
    */
   DECLARE_LUA_CLOSURE(StreamHandleWrapper, luaBodyIterator);
 
-  /**
-   * Base64 escape a string.
-   * @param1 (string) string to be base64 escaped.
-   * @return (string) base64 escaped string.
-   */
-  DECLARE_LUA_FUNCTION(StreamHandleWrapper, luaBase64Escape);
-
   int doSynchronousHttpCall(lua_State* state, Tracing::Span& span);
   int doAsynchronousHttpCall(lua_State* state, Tracing::Span& span);
 
@@ -317,9 +308,6 @@ private:
   State state_{State::Running};
   std::function<void()> yield_callback_;
   Http::AsyncClient::Request* http_request_{};
-
-  // The inserted crypto object pointers will not be removed from this map.
-  absl::flat_hash_map<std::string, Envoy::Common::Crypto::CryptoObjectPtr> public_key_storage_;
 };
 
 /**
@@ -364,32 +352,14 @@ using FilterConfigConstSharedPtr = std::shared_ptr<FilterConfig>;
 class FilterConfigPerRoute : public Router::RouteSpecificFilterConfig {
 public:
   FilterConfigPerRoute(const envoy::extensions::filters::http::lua::v3::LuaPerRoute& config,
-                       Server::Configuration::ServerFactoryContext& context);
-
-  ~FilterConfigPerRoute() override {
-    // The design of the TLS system does not allow TLS state to be modified in worker threads.
-    // However, when the route configuration is dynamically updated via RDS, the old
-    // FilterConfigPerRoute object may be destructed in a random worker thread. Therefore, to
-    // ensure thread safety, ownership of per_lua_code_setup_ptr_ must be transferred to the main
-    // thread and destroyed when the FilterConfigPerRoute object is not destructed in the main
-    // thread.
-    if (per_lua_code_setup_ptr_ && !main_thread_dispatcher_.isThreadSafe()) {
-      auto shared_ptr_wrapper =
-          std::make_shared<PerLuaCodeSetupPtr>(std::move(per_lua_code_setup_ptr_));
-      main_thread_dispatcher_.post([shared_ptr_wrapper] { shared_ptr_wrapper->reset(); });
-    }
-  }
+                       ThreadLocal::SlotAllocator& tls, Api::Api& api);
 
   bool disabled() const { return disabled_; }
   const std::string& name() const { return name_; }
-  PerLuaCodeSetup* perLuaCodeSetup() const { return per_lua_code_setup_ptr_.get(); }
 
 private:
-  Event::Dispatcher& main_thread_dispatcher_;
-
   const bool disabled_;
   const std::string name_;
-  PerLuaCodeSetupPtr per_lua_code_setup_ptr_;
 };
 
 namespace {
@@ -405,12 +375,11 @@ PerLuaCodeSetup* getPerLuaCodeSetup(const FilterConfig* filter_config,
   if (config_per_route != nullptr) {
     if (config_per_route->disabled()) {
       return nullptr;
-    }
-    if (!config_per_route->name().empty()) {
+    } else if (!config_per_route->name().empty()) {
       ASSERT(filter_config);
       return filter_config->perLuaCodeSetup(config_per_route->name());
     }
-    return config_per_route->perLuaCodeSetup();
+    return nullptr;
   }
   ASSERT(filter_config);
   return filter_config->perLuaCodeSetup(GLOBAL_SCRIPT_NAME);

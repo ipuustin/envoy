@@ -236,21 +236,21 @@ private:
 };
 
 /**
- * Lua wrapper for key for accessing the imported public keys.
+ * Lua wrapper for EVP_PKEY.
  */
 class PublicKeyWrapper : public Filters::Common::Lua::BaseLuaObject<PublicKeyWrapper> {
 public:
-  explicit PublicKeyWrapper(absl::string_view key) : public_key_(key) {}
+  PublicKeyWrapper(Envoy::Common::Crypto::CryptoObjectPtr key) : public_key_(std::move(key)) {}
   static ExportedFunctions exportedFunctions() { return {{"get", static_luaGet}}; }
 
 private:
   /**
-   * Get public key value.
-   * @return public key value or nil if key is empty.
+   * Get a pointer to public key.
+   * @return pointer to public key.
    */
   DECLARE_LUA_FUNCTION(PublicKeyWrapper, luaGet);
 
-  const std::string public_key_;
+  Envoy::Common::Crypto::CryptoObjectPtr public_key_;
 };
 
 } // namespace Lua

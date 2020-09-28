@@ -34,12 +34,12 @@
 #include "absl/container/node_hash_map.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
+#include "boringssl_compat/bssl.h"
 #include "eval/public/cel_value.h"
 #include "eval/public/containers/field_access.h"
 #include "eval/public/containers/field_backed_list_impl.h"
 #include "eval/public/containers/field_backed_map_impl.h"
 #include "eval/public/structs/cel_proto_wrapper.h"
-#include "openssl/bytestring.h"
 #include "openssl/hmac.h"
 #include "openssl/sha.h"
 

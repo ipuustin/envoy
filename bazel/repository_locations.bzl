@@ -85,6 +85,18 @@ REPOSITORY_LOCATIONS_SPEC = dict(
         release_date = "2019-08-08",
         cpe = "cpe:2.3:a:google:boringssl:*",
     ),
+    openssl = dict(
+        project_name = "openssl",
+        project_desc = "SSL library",
+        project_url = "https://github.com/openssl/openssl",
+        version = "1.1.1g",
+        sha256 = "281e4f13142b53657bd154481e18195b2d477572fdffa8ed1065f73ef5a19777",
+        urls = ["https://github.com/openssl/openssl/archive/OpenSSL_1_1_1g.tar.gz"],
+        strip_prefix = "openssl-OpenSSL_1_1_1g",
+        use_category = ["controlplane", "dataplane_core"],
+        release_date = "2020-08-12",
+        cpe = "N/A",
+    ),
     com_google_absl = dict(
         project_name = "Abseil",
         project_desc = "Open source collection of C++ libraries drawn from the most fundamental pieces of Google’s internal codebase",

@@ -29,6 +29,8 @@ envoy_cc_extension(
     security_posture = "unknown",
     undocumented = True,
     deps = [
+        "//boringssl_compat:bssl_compat_cbs_lib",
+        "//boringssl_compat:bssl_compat_lib",
         "//include/envoy/buffer:buffer_interface",
         "//source/common/common:assert_lib",
         "//source/common/crypto:utility_lib",

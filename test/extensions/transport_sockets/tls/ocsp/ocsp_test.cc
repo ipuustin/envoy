@@ -163,7 +163,7 @@ public:
     EXPECT_EQ(expected, Asn1OcspUtility::parseResponseStatus(cbs));
   }
 
-  void expectThrowOnWrongTag(std::function<void(CBS&)> parse) {
+  void expectThrowOnWrongTag(std::function<void(Envoy::Extensions::Common::Cbs::CBS&)> parse) {
     CBS cbs;
     CBS_init(&cbs, asn1_true.data(), asn1_true.size());
     EXPECT_THROW(parse(cbs), EnvoyException);

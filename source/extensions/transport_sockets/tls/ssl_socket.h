@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 
+#include "envoy/event/file_event.h"
 #include "envoy/network/connection.h"
 #include "envoy/network/transport_socket.h"
 #include "envoy/secret/secret_callbacks.h"
@@ -22,6 +23,7 @@
 #include "absl/container/node_hash_map.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/optional.h"
+#include "boringssl_compat/bssl.h"
 #include "openssl/ssl.h"
 
 namespace Envoy {
@@ -29,10 +31,12 @@ namespace Extensions {
 namespace TransportSockets {
 namespace Tls {
 
-#define ALL_SSL_SOCKET_FACTORY_STATS(COUNTER)                                                      \
-  COUNTER(ssl_context_update_by_sds)                                                               \
-  COUNTER(upstream_context_secrets_not_ready)                                                      \
+// clang-format off
+#define ALL_SSL_SOCKET_FACTORY_STATS(COUNTER)                                 \
+  COUNTER(ssl_context_update_by_sds)                                          \
+  COUNTER(upstream_context_secrets_not_ready)                                 \
   COUNTER(downstream_context_secrets_not_ready)
+// clang-format on
 
 /**
  * Wrapper struct for SSL socket factory stats. @see stats_macros.h
@@ -42,6 +46,74 @@ struct SslSocketFactoryStats {
 };
 
 enum class InitialState { Client, Server };
+#if 0
+enum class SocketState {
+  PreHandshake,
+  HandshakeInProgress,
+  HandshakeReady,
+  HandshakeComplete,
+  ShutdownSent
+};
+
+class SslExtendedSocketInfoImpl : public Envoy::Ssl::SslExtendedSocketInfo {
+public:
+  void setCertificateValidationStatus(Envoy::Ssl::ClientValidationStatus validated) override;
+  Envoy::Ssl::ClientValidationStatus certificateValidationStatus() const override;
+
+private:
+  Envoy::Ssl::ClientValidationStatus certificate_validation_status_{
+      Envoy::Ssl::ClientValidationStatus::NotValidated};
+};
+
+class SslSocketInfo : public Envoy::Ssl::ConnectionInfo {
+public:
+  SslSocketInfo(bssl::UniquePtr<SSL> ssl, ContextImplSharedPtr ctx);
+
+  // Ssl::ConnectionInfo
+  bool peerCertificatePresented() const override;
+  bool peerCertificateValidated() const override;
+  absl::Span<const std::string> uriSanLocalCertificate() const override;
+  const std::string& sha256PeerCertificateDigest() const override;
+  const std::string& sha1PeerCertificateDigest() const override;
+  const std::string& serialNumberPeerCertificate() const override;
+  const std::string& issuerPeerCertificate() const override;
+  const std::string& subjectPeerCertificate() const override;
+  const std::string& subjectLocalCertificate() const override;
+  absl::Span<const std::string> uriSanPeerCertificate() const override;
+  const std::string& urlEncodedPemEncodedPeerCertificate() const override;
+  const std::string& urlEncodedPemEncodedPeerCertificateChain() const override;
+  absl::Span<const std::string> dnsSansPeerCertificate() const override;
+  absl::Span<const std::string> dnsSansLocalCertificate() const override;
+  absl::optional<SystemTime> validFromPeerCertificate() const override;
+  absl::optional<SystemTime> expirationPeerCertificate() const override;
+  const std::string& sessionId() const override;
+  uint16_t ciphersuiteId() const override;
+  std::string ciphersuiteString() const override;
+  const std::string& tlsVersion() const override;
+  absl::optional<std::string> x509Extension(absl::string_view extension_name) const override;
+
+  SSL* rawSslForTest() const { return ssl_.get(); }
+
+  bssl::UniquePtr<SSL> ssl_;
+
+private:
+  mutable std::vector<std::string> cached_uri_san_local_certificate_;
+  mutable std::string cached_sha_256_peer_certificate_digest_;
+  mutable std::string cached_sha_1_peer_certificate_digest_;
+  mutable std::string cached_serial_number_peer_certificate_;
+  mutable std::string cached_issuer_peer_certificate_;
+  mutable std::string cached_subject_peer_certificate_;
+  mutable std::string cached_subject_local_certificate_;
+  mutable std::vector<std::string> cached_uri_san_peer_certificate_;
+  mutable std::string cached_url_encoded_pem_encoded_peer_certificate_;
+  mutable std::string cached_url_encoded_pem_encoded_peer_cert_chain_;
+  mutable std::vector<std::string> cached_dns_san_peer_certificate_;
+  mutable std::vector<std::string> cached_dns_san_local_certificate_;
+  mutable std::string cached_session_id_;
+  mutable std::string cached_tls_version_;
+  mutable SslExtendedSocketInfoImpl extended_socket_info_;
+};
+#endif
 
 class SslSocket : public Network::TransportSocket,
                   public Envoy::Ssl::PrivateKeyConnectionCallbacks,
@@ -92,6 +164,7 @@ private:
   const Network::TransportSocketOptionsSharedPtr transport_socket_options_;
   Network::TransportSocketCallbacks* callbacks_{};
   ContextImplSharedPtr ctx_;
+  // Event::FileEventPtr file_event_;
   uint64_t bytes_to_retry_{};
   std::string failure_reason_;
 

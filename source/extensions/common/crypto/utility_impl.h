@@ -2,7 +2,7 @@
 
 #include "common/crypto/utility.h"
 
-#include "openssl/bytestring.h"
+#include "boringssl_compat/cbs.h"
 #include "openssl/hmac.h"
 #include "openssl/sha.h"
 

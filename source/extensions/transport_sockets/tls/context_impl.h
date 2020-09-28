@@ -9,7 +9,10 @@
 #include "envoy/network/transport_socket.h"
 #include "envoy/ssl/context.h"
 #include "envoy/ssl/context_config.h"
+
+/*
 #include "envoy/ssl/private_key/private_key.h"
+*/
 #include "envoy/ssl/ssl_socket_extended_info.h"
 #include "envoy/stats/scope.h"
 #include "envoy/stats/stats_macros.h"
@@ -19,25 +22,30 @@
 
 #include "extensions/transport_sockets/tls/context_manager_impl.h"
 #include "extensions/transport_sockets/tls/ocsp/ocsp.h"
+#include "extensions/transport_sockets/tls/openssl_impl.h"
 
 #include "absl/synchronization/mutex.h"
+#include "boringssl_compat/bssl.h"
 #include "openssl/ssl.h"
 #include "openssl/x509v3.h"
 
 namespace Envoy {
-#ifndef OPENSSL_IS_BORINGSSL
-#error Envoy requires BoringSSL
+#ifdef OPENSSL_IS_BORINGSSL
+#error OpenSSL-based transport socket requires OpenSSL
 #endif
 
 namespace Extensions {
 namespace TransportSockets {
 namespace Tls {
 
+// clang-format off
 #define ALL_SSL_STATS(COUNTER, GAUGE, HISTOGRAM)                                                   \
   COUNTER(connection_error)                                                                        \
   COUNTER(handshake)                                                                               \
   COUNTER(session_reused)                                                                          \
   COUNTER(no_certificate)                                                                          \
+  COUNTER(fail_async_handshake_error)                                                              \
+  COUNTER(fail_async_premature_disconnect)                                                         \
   COUNTER(fail_verify_no_cert)                                                                     \
   COUNTER(fail_verify_error)                                                                       \
   COUNTER(fail_verify_san)                                                                         \
@@ -46,6 +54,7 @@ namespace Tls {
   COUNTER(ocsp_staple_omitted)                                                                     \
   COUNTER(ocsp_staple_responses)                                                                   \
   COUNTER(ocsp_staple_requests)
+// clang-format on
 
 /**
  * Wrapper struct for SSL stats. @see stats_macros.h
@@ -89,7 +98,7 @@ public:
    * @param pattern the pattern to match against (*.example.com)
    * @return true if the san matches pattern
    */
-  static bool dnsNameMatch(const absl::string_view dns_name, const absl::string_view pattern);
+  static bool dnsNameMatch(const std::string& dns_name, const char* pattern);
 
   SslStats& stats() { return stats_; }
 
@@ -107,8 +116,6 @@ public:
 
   std::vector<Ssl::PrivateKeyMethodProviderSharedPtr> getPrivateKeyMethodProviders();
 
-  bool verifyCertChain(X509& leaf_cert, STACK_OF(X509) & intermediates, std::string& error_details);
-
 protected:
   ContextImpl(Stats::Scope& scope, const Envoy::Ssl::ContextConfig& config,
               TimeSource& time_source);
@@ -124,11 +131,6 @@ protected:
 
   // A SSL_CTX_set_cert_verify_callback for custom cert validation.
   static int verifyCallback(X509_STORE_CTX* store_ctx, void* arg);
-
-  // Called by verifyCallback to do the actual cert chain verification.
-  int doVerifyCertChain(X509_STORE_CTX* store_ctx, Ssl::SslExtendedSocketInfo* ssl_extended_info,
-                        X509& leaf_cert,
-                        const Network::TransportSocketOptions* transport_socket_options);
 
   Envoy::Ssl::ClientValidationStatus
   verifyCertificate(X509* cert, const std::vector<std::string>& verify_san_list,
@@ -184,7 +186,11 @@ protected:
     std::string getCertChainFileName() const { return cert_chain_file_path_; };
     void addClientValidationContext(const Envoy::Ssl::CertificateValidationContextConfig& config,
                                     bool require_client_cert);
+
+    /*
     bool isCipherEnabled(uint16_t cipher_id, uint16_t client_version);
+    */
+
     Envoy::Ssl::PrivateKeyMethodProviderSharedPtr getPrivateKeyMethodProvider() {
       return private_key_method_provider_;
     }
@@ -233,7 +239,9 @@ public:
 
 private:
   int newSessionKey(SSL_SESSION* session);
+  /*
   uint16_t parseSigningAlgorithmsForTest(const std::string& sigalgs);
+  */
 
   const std::string server_name_indication_;
   const bool allow_renegotiation_;
@@ -241,6 +249,7 @@ private:
   absl::Mutex session_keys_mu_;
   std::deque<bssl::UniquePtr<SSL_SESSION>> session_keys_ ABSL_GUARDED_BY(session_keys_mu_);
   bool session_keys_single_use_{false};
+  std::string sni_;
 };
 
 enum class OcspStapleAction { Staple, NoStaple, Fail, ClientNotCapable };
@@ -250,11 +259,6 @@ public:
   ServerContextImpl(Stats::Scope& scope, const Envoy::Ssl::ServerContextConfig& config,
                     const std::vector<std::string>& server_names, TimeSource& time_source);
 
-  // Select the TLS certificate context in SSL_CTX_set_select_certificate_cb() callback with
-  // ClientHello details. This is made public for use by custom TLS extensions who want to
-  // manually create and use this as a client hello callback.
-  enum ssl_select_cert_result_t selectTlsContext(const SSL_CLIENT_HELLO* ssl_client_hello);
-
 private:
   using SessionContextID = std::array<uint8_t, SSL_MAX_SSL_SESSION_ID_LENGTH>;
 
@@ -262,11 +266,13 @@ private:
                          unsigned int inlen);
   int sessionTicketProcess(SSL* ssl, uint8_t* key_name, uint8_t* iv, EVP_CIPHER_CTX* ctx,
                            HMAC_CTX* hmac_ctx, int encrypt);
-  bool isClientEcdsaCapable(const SSL_CLIENT_HELLO* ssl_client_hello);
-  bool isClientOcspCapable(const SSL_CLIENT_HELLO* ssl_client_hello);
+  bool isClientEcdsaCapable(SSL* ssl);
+  bool isClientOcspCapable(SSL* ssl);
+  // Select the TLS certificate context in SSL_CTX_set_select_certificate_cb() callback with
+  // ClientHello details.
+  void selectTlsContext(SSL* ssl);
   OcspStapleAction ocspStapleAction(const ServerContextImpl::TlsContext& ctx,
                                     bool client_ocsp_capable);
-
   SessionContextID generateHashForSessionContextId(const std::vector<std::string>& server_names);
 
   const std::vector<Envoy::Ssl::ServerContextConfig::SessionTicketKey> session_ticket_keys_;

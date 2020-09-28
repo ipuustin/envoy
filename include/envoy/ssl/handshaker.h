@@ -6,6 +6,7 @@
 #include "envoy/network/post_io_action.h"
 #include "envoy/protobuf/message_validator.h"
 
+#include "boringssl_compat/bssl.h"
 #include "openssl/ssl.h"
 
 namespace Envoy {

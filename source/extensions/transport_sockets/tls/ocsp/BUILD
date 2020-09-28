@@ -27,6 +27,7 @@ envoy_cc_library(
     hdrs = ["asn1_utility.h"],
     repository = "",
     deps = [
+        "//boringssl_compat:bssl_compat_cbs_lib",
         "//include/envoy/common:time_interface",
         "//include/envoy/ssl:context_config_interface",
         "//source/common/common:c_smart_ptr_lib",

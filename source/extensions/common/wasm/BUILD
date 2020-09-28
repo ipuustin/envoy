@@ -76,6 +76,7 @@ envoy_cc_library(
     deps = [
         ":wasm_hdr",
         ":wasm_runtime_factory_interface",
+        "//boringssl_compat:bssl_compat_lib",
         "//external:abseil_base",
         "//external:abseil_node_hash_map",
         "//include/envoy/server:lifecycle_notifier_interface",

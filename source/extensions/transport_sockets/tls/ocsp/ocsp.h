@@ -9,7 +9,7 @@
 
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
-#include "openssl/bytestring.h"
+#include "boringssl_compat/cbs.h"
 #include "openssl/ssl.h"
 
 /**
@@ -251,7 +251,7 @@ public:
    * @throws Envoy::EnvoyException if `cbs` does not contain a well-formed OcspResponse
    * element.
    */
-  static std::unique_ptr<OcspResponse> parseOcspResponse(CBS& cbs);
+  static std::unique_ptr<OcspResponse> parseOcspResponse(Envoy::Extensions::Common::Cbs::CBS& cbs);
 
   /**
    * @param cbs a CBS& that refers to an `ASN.1` OcspResponseStatus element
@@ -259,7 +259,7 @@ public:
    * @throws Envoy::EnvoyException if `cbs` does not contain a well-formed
    * OcspResponseStatus element.
    */
-  static OcspResponseStatus parseResponseStatus(CBS& cbs);
+  static OcspResponseStatus parseResponseStatus(Envoy::Extensions::Common::Cbs::CBS& cbs);
 
   /**
    * @param cbs a CBS& that refers to an `ASN.1` Response element
@@ -267,7 +267,7 @@ public:
    * @throws Envoy::EnvoyException if `cbs` does not contain a well-formed
    * structure that is a valid Response type.
    */
-  static ResponsePtr parseResponseBytes(CBS& cbs);
+  static ResponsePtr parseResponseBytes(Envoy::Extensions::Common::Cbs::CBS& cbs);
 
   /**
    * @param cbs a CBS& that refers to an `ASN.1` BasicOcspResponse element
@@ -275,7 +275,8 @@ public:
    * @throws Envoy::EnvoyException if `cbs` does not contain a well-formed
    * BasicOcspResponse element.
    */
-  static std::unique_ptr<BasicOcspResponse> parseBasicOcspResponse(CBS& cbs);
+  static std::unique_ptr<BasicOcspResponse>
+  parseBasicOcspResponse(Envoy::Extensions::Common::Cbs::CBS& cbs);
 
   /**
    * @param cbs a CBS& that refers to an `ASN.1` ResponseData element
@@ -284,7 +285,7 @@ public:
    * @throws Envoy::EnvoyException if `cbs` does not contain a well-formed
    * ResponseData element.
    */
-  static ResponseData parseResponseData(CBS& cbs);
+  static ResponseData parseResponseData(Envoy::Extensions::Common::Cbs::CBS& cbs);
 
   /**
    * @param cbs a CBS& that refers to an `ASN.1` SingleResponse element
@@ -293,7 +294,7 @@ public:
    * @throws Envoy::EnvoyException if `cbs` does not contain a well-formed
    * SingleResponse element.
    */
-  static SingleResponse parseSingleResponse(CBS& cbs);
+  static SingleResponse parseSingleResponse(Envoy::Extensions::Common::Cbs::CBS& cbs);
 
   /**
    * @param cbs a CBS& that refers to an `ASN.1` CertId element
@@ -302,7 +303,7 @@ public:
    * @throws Envoy::EnvoyException if `cbs` does not contain a well-formed
    * CertId element.
    */
-  static CertId parseCertId(CBS& cbs);
+  static CertId parseCertId(Envoy::Extensions::Common::Cbs::CBS& cbs);
 };
 
 } // namespace Ocsp

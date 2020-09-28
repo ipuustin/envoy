@@ -22,6 +22,8 @@ envoy_cc_library(
         "//visibility:public",
     ],
     deps = [
+        "//boringssl_compat:bssl_compat_cbs_lib",
+        "//boringssl_compat:bssl_compat_lib",
         "//include/envoy/event:dispatcher_interface",
         "//include/envoy/event:timer_interface",
         "//include/envoy/network:filter_interface",

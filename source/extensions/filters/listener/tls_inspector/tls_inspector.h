@@ -8,6 +8,7 @@
 
 #include "common/common/logger.h"
 
+#include "boringssl_compat/bssl.h"
 #include "openssl/ssl.h"
 
 namespace Envoy {

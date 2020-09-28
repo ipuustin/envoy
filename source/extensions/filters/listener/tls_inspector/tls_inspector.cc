@@ -16,12 +16,53 @@
 #include "extensions/transport_sockets/well_known_names.h"
 
 #include "absl/strings/str_join.h"
+#include "boringssl_compat/cbs.h"
 #include "openssl/ssl.h"
 
 namespace Envoy {
 namespace Extensions {
 namespace ListenerFilters {
 namespace TlsInspector {
+
+namespace {
+
+// This is copied from OpenSSL's tests.
+const char* parseServerName(const uint8_t* data, size_t length) {
+  size_t remaining = length;
+
+  if (remaining <= 2) {
+    return nullptr;
+  }
+
+  // Extract the length of the supplied list of names.
+  size_t len;
+  len = (*(data++) << 8);
+  len += *(data++);
+  if (len + 2 != remaining) {
+    return nullptr;
+  }
+  remaining = len;
+  // The list in practice only has a single element, so we only consider
+  // the first one.
+  if (remaining == 0 || *data++ != TLSEXT_NAMETYPE_host_name) {
+    return nullptr;
+  }
+  remaining--;
+  // Now we can finally pull out the byte array with the actual hostname.
+  if (remaining <= 2) {
+    return nullptr;
+  }
+  len = (*(data++) << 8);
+  len += *(data++);
+  if (len + 2 != remaining) {
+    return nullptr;
+  }
+  return reinterpret_cast<const char*>(data);
+}
+
+} // namespace
+
+using namespace Envoy::Extensions::Common::Cbs;
 
 // Min/max TLS version recognized by the underlying TLS/SSL library.
 const unsigned Config::TLS_MIN_SUPPORTED_VERSION = TLS1_VERSION;
@@ -41,27 +82,27 @@ Config::Config(Stats::Scope& scope, uint32_t max_client_hello_size)
   SSL_CTX_set_max_proto_version(ssl_ctx_.get(), TLS_MAX_SUPPORTED_VERSION);
   SSL_CTX_set_options(ssl_ctx_.get(), SSL_OP_NO_TICKET);
   SSL_CTX_set_session_cache_mode(ssl_ctx_.get(), SSL_SESS_CACHE_OFF);
-  SSL_CTX_set_select_certificate_cb(
-      ssl_ctx_.get(), [](const SSL_CLIENT_HELLO* client_hello) -> ssl_select_cert_result_t {
+  SSL_CTX_set_client_hello_cb(
+      ssl_ctx_.get(),
+      [](SSL* ssl, int*, void*) -> int {
+        Filter* filter = static_cast<Filter*>(SSL_get_app_data(ssl));
         const uint8_t* data;
         size_t len;
-        if (SSL_early_callback_ctx_extension_get(
-                client_hello, TLSEXT_TYPE_application_layer_protocol_negotiation, &data, &len)) {
-          Filter* filter = static_cast<Filter*>(SSL_get_app_data(client_hello->ssl));
+
+        if (SSL_client_hello_get0_ext(ssl, TLSEXT_TYPE_application_layer_protocol_negotiation,
+                                      &data, &len)) {
           filter->onALPN(data, len);
         }
-        return ssl_select_cert_success;
-      });
-  SSL_CTX_set_tlsext_servername_callback(
-      ssl_ctx_.get(), [](SSL* ssl, int* out_alert, void*) -> int {
-        Filter* filter = static_cast<Filter*>(SSL_get_app_data(ssl));
-        filter->onServername(
-            absl::NullSafeStringView(SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name)));
 
-        // Return an error to stop the handshake; we have what we wanted already.
-        *out_alert = SSL_AD_USER_CANCELLED;
-        return SSL_TLSEXT_ERR_ALERT_FATAL;
-      });
+        const char* servername = nullptr;
+        if (SSL_client_hello_get0_ext(ssl, TLSEXT_TYPE_server_name, &data, &len)) {
+          servername = parseServerName(data, len);
+        }
+        filter->onServername(absl::NullSafeStringView(servername));
+
+        return SSL_TLSEXT_ERR_OK;
+      },
+      NULL);
 }
 
 bssl::UniquePtr<SSL> Config::newSsl() { return bssl::UniquePtr<SSL>{SSL_new(ssl_ctx_.get())}; }

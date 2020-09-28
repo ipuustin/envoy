@@ -82,6 +82,7 @@ envoy_cc_library(
         ":io_handle_bio_lib",
         ":ssl_handshaker_lib",
         ":utility_lib",
+        "//boringssl_compat:bssl_compat_lib",
         "//include/envoy/network:connection_interface",
         "//include/envoy/network:transport_socket_interface",
         "//include/envoy/ssl:handshaker_interface",
@@ -176,8 +177,26 @@ envoy_cc_library(
         "ssl",
     ],
     deps = [
+        ":openssl_impl_lib",
+        "//boringssl_compat:bssl_compat_lib",
         "//source/common/common:assert_lib",
         "//source/common/common:utility_lib",
         "//source/common/network:address_lib",
+    ],
+)
+
+envoy_cc_library(
+    name = "openssl_impl_lib",
+    srcs = [
+        "openssl_impl.cc",
+    ],
+    hdrs = [
+        "openssl_impl.h",
+    ],
+    external_deps = [
+        "ssl",
+    ],
+    deps = [
+        "//boringssl_compat:bssl_compat_lib",
     ],
 )

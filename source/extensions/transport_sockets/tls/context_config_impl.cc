@@ -330,21 +330,13 @@ const unsigned ClientContextConfigImpl::DEFAULT_MIN_VERSION = TLS1_2_VERSION;
 const unsigned ClientContextConfigImpl::DEFAULT_MAX_VERSION = TLS1_2_VERSION;
 
 const std::string ClientContextConfigImpl::DEFAULT_CIPHER_SUITES =
-#ifndef BORINGSSL_FIPS
     "[ECDHE-ECDSA-AES128-GCM-SHA256|ECDHE-ECDSA-CHACHA20-POLY1305]:"
     "[ECDHE-RSA-AES128-GCM-SHA256|ECDHE-RSA-CHACHA20-POLY1305]:"
-#else // BoringSSL FIPS
-    "ECDHE-ECDSA-AES128-GCM-SHA256:"
-    "ECDHE-RSA-AES128-GCM-SHA256:"
-#endif
     "ECDHE-ECDSA-AES256-GCM-SHA384:"
     "ECDHE-RSA-AES256-GCM-SHA384:";
 
-const std::string ClientContextConfigImpl::DEFAULT_CURVES =
-#ifndef BORINGSSL_FIPS
-    "X25519:"
-#endif
-    "P-256";
+const std::string ClientContextConfigImpl::DEFAULT_CURVES = "X25519:"
+                                                            "P-256";
 
 ClientContextConfigImpl::ClientContextConfigImpl(
     const envoy::extensions::transport_sockets::tls::v3::UpstreamTlsContext& config,
@@ -371,13 +363,8 @@ const unsigned ServerContextConfigImpl::DEFAULT_MIN_VERSION = TLS1_VERSION;
 const unsigned ServerContextConfigImpl::DEFAULT_MAX_VERSION = TLS1_3_VERSION;
 
 const std::string ServerContextConfigImpl::DEFAULT_CIPHER_SUITES =
-#ifndef BORINGSSL_FIPS
     "[ECDHE-ECDSA-AES128-GCM-SHA256|ECDHE-ECDSA-CHACHA20-POLY1305]:"
     "[ECDHE-RSA-AES128-GCM-SHA256|ECDHE-RSA-CHACHA20-POLY1305]:"
-#else // BoringSSL FIPS
-    "ECDHE-ECDSA-AES128-GCM-SHA256:"
-    "ECDHE-RSA-AES128-GCM-SHA256:"
-#endif
     "ECDHE-ECDSA-AES128-SHA:"
     "ECDHE-RSA-AES128-SHA:"
     "AES128-GCM-SHA256:"
@@ -389,11 +376,8 @@ const std::string ServerContextConfigImpl::DEFAULT_CIPHER_SUITES =
     "AES256-GCM-SHA384:"
     "AES256-SHA";
 
-const std::string ServerContextConfigImpl::DEFAULT_CURVES =
-#ifndef BORINGSSL_FIPS
-    "X25519:"
-#endif
-    "P-256";
+const std::string ServerContextConfigImpl::DEFAULT_CURVES = "X25519:"
+                                                            "P-256";
 
 ServerContextConfigImpl::ServerContextConfigImpl(
     const envoy::extensions::transport_sockets::tls::v3::DownstreamTlsContext& config,

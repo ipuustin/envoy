@@ -117,7 +117,7 @@ def envoy_dependencies(skip_targets = []):
     _boringssl_fips()
     native.bind(
         name = "ssl",
-        actual = "@envoy//bazel:boringssl",
+        actual = "@openssl_shared//:ssl",
     )
 
     # The long repo names (`com_github_fmtlib_fmt` instead of `fmtlib`) are
