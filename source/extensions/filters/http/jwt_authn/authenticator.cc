@@ -170,6 +170,7 @@ void AuthenticatorImpl::startVerify() {
     return;
   }
 
+#if 0
   // Default is 60 seconds
   uint64_t clock_skew_seconds = ::google::jwt_verify::kClockSkewInSecond;
   if (jwks_data_->getJwtProvider().clock_skew_seconds() > 0) {
@@ -180,6 +181,7 @@ void AuthenticatorImpl::startVerify() {
     doneWithStatus(status);
     return;
   }
+#endif
 
   // Check if audience is allowed
   bool is_allowed = check_audience_ ? check_audience_->areAudiencesAllowed(jwt_->audiences_)

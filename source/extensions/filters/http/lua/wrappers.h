@@ -224,7 +224,7 @@ private:
   // Envoy::Lua::BaseLuaObject
   void onMarkDead() override {
     dynamic_metadata_wrapper_.reset();
-    downstream_ssl_connection_.reset();
+    // downstream_ssl_connection_.reset();
   }
 
   StreamInfo::StreamInfo& stream_info_;
