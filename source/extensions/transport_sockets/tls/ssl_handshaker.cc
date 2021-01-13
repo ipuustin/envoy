@@ -223,32 +223,29 @@ const std::string& SslHandshakerImpl::tlsVersion() const {
 }
 
 void SslHandshakerImpl::asyncCb() {
-  // ENVOY_CONN_LOG(debug, "SSL async done!", handshake_callbacks_->connection());
-
   ASSERT(state_ != Ssl::SocketState::HandshakeComplete);
-  state_ = Ssl::SocketState::HandshakeComplete;
-  // We lose the return value here, so might consider propagating it with an event
-  // in case we run into "Close" result from the handshake handler.
-  PostIoAction action = doHandshake();
-  if (action == PostIoAction::Close) {
-    // ENVOY_CONN_LOG(debug, "async handshake completion error",
-    // handshake_callbacks_->connection()); ctx_->stats().fail_async_handshake_error_.inc();
-    handshake_callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite);
+
+  if (state_ == Ssl::SocketState::ShutdownSent) {
+    return;
   }
+
+  PostIoAction action = doHandshake();
+
+  if (action == PostIoAction::Close) {
+    // ctx_->stats().fail_async_handshake_error_.inc();
+    handshake_callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite);
+    return;
+  }
+
+  // This function will not be called again, the handshake must be ready.
+  ASSERT(state_ != Ssl::SocketState::HandshakeInProgress);
 }
 
 Network::PostIoAction SslHandshakerImpl::doHandshake() {
   ASSERT(state_ != Ssl::SocketState::HandshakeComplete && state_ != Ssl::SocketState::ShutdownSent);
-
-  if (state_ == Ssl::SocketState::HandshakeInProgress) {
-    return PostIoAction::KeepOpen;
-  }
-
   int rc = SSL_do_handshake(ssl());
   if (rc == 1) {
-    // ENVOY_CONN_LOG(debug, "handshake complete", handshake_callbacks_->connection());
     state_ = Ssl::SocketState::HandshakeComplete;
-    // ctx_->logHandshake();
     handshake_callbacks_->onSuccess(ssl());
 
     // It's possible that we closed during the handshake callback.
@@ -262,73 +259,45 @@ Network::PostIoAction SslHandshakerImpl::doHandshake() {
     switch (err) {
     case SSL_ERROR_WANT_READ:
     case SSL_ERROR_WANT_WRITE:
-      // ENVOY_CONN_LOG(debug, "handshake expecting {}", handshake_callbacks_->connection(),
-      //                err == SSL_ERROR_WANT_READ ? "read" : "write");
       return PostIoAction::KeepOpen;
     case SSL_ERROR_WANT_ASYNC:
-      // ENVOY_CONN_LOG(debug, "SSL handshake: request async handling",
-      // handshake_callbacks_->connection());
+      if (state_ == Ssl::SocketState::HandshakeInProgress) {
+        return PostIoAction::KeepOpen;
+      }
 
       state_ = Ssl::SocketState::HandshakeInProgress;
 
       rc = SSL_get_all_async_fds(ssl(), NULL, &numfds);
       if (rc == 0) {
+        handshake_callbacks_->onFailure();
         return PostIoAction::Close;
       }
 
       /* We only wait for the first fd here! Will fail if multiple async engines. */
       if (numfds != 1) {
-        // ENVOY_LOG(error, "Only one async OpenSSL engine is supported currently");
+        handshake_callbacks_->onFailure();
         return PostIoAction::Close;
       }
 
       fds = static_cast<OSSL_ASYNC_FD*>(malloc(numfds * sizeof(OSSL_ASYNC_FD)));
       if (fds == NULL) {
+        handshake_callbacks_->onFailure();
         return PostIoAction::Close;
       }
 
       rc = SSL_get_all_async_fds(ssl(), fds, &numfds);
       if (rc == 0) {
         free(fds);
+        handshake_callbacks_->onFailure();
         return PostIoAction::Close;
       }
 
       file_event_ = handshake_callbacks_->connection().dispatcher().createFileEvent(
           fds[0], [this](uint32_t /* events */) -> void { asyncCb(); },
           Event::FileTriggerType::Edge, Event::FileReadyType::Read);
-      // ENVOY_CONN_LOG(debug, "SSL async fd: {}, numfds: {}", handshake_callbacks_->connection(),
-      // fds[0],
-      //                numfds);
+
       free(fds);
 
-      return PostIoAction::KeepOpen;
-    default:
-      // ENVOY_CONN_LOG(debug, "handshake error: {}", handshake_callbacks_->connection(), err);
-      return PostIoAction::Close;
-    }
-  }
-}
-
-#if 0
-Network::PostIoAction SslHandshakerImpl::doHandshake() {
-  ASSERT(state_ != Ssl::SocketState::HandshakeComplete && state_ != Ssl::SocketState::ShutdownSent);
-  int rc = SSL_do_handshake(ssl());
-  if (rc == 1) {
-    state_ = Ssl::SocketState::HandshakeComplete;
-    handshake_callbacks_->onSuccess(ssl());
-
-    // It's possible that we closed during the handshake callback.
-    return handshake_callbacks_->connection().state() == Network::Connection::State::Open
-               ? PostIoAction::KeepOpen
-               : PostIoAction::Close;
-  } else {
-    int err = SSL_get_error(ssl(), rc);
-    switch (err) {
-    case SSL_ERROR_WANT_READ:
-    case SSL_ERROR_WANT_WRITE:
-      return PostIoAction::KeepOpen;
-    case SSL_ERROR_WANT_PRIVATE_KEY_OPERATION:
-      state_ = Ssl::SocketState::HandshakeInProgress;
       return PostIoAction::KeepOpen;
     default:
       handshake_callbacks_->onFailure();
@@ -336,7 +305,6 @@ Network::PostIoAction SslHandshakerImpl::doHandshake() {
     }
   }
 }
-#endif
 
 const std::string& SslHandshakerImpl::serialNumberPeerCertificate() const {
   if (!cached_serial_number_peer_certificate_.empty()) {
