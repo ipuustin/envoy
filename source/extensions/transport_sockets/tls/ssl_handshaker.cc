@@ -230,20 +230,22 @@ void SslHandshakerImpl::asyncCb() {
     return;
   }
 
-  PostIoAction action = doHandshake();
+  while (state_ == Ssl::SocketState::HandshakeInProgress) {
+    PostIoAction action = doHandshake();
 
-  if (action == PostIoAction::Close) {
-    // ctx_->stats().fail_async_handshake_error_.inc();
-    ENVOY_CONN_LOG(debug, "async handshake completion error", handshake_callbacks_->connection());
-    handshake_callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite);
-    return;
+    if (action == PostIoAction::Close) {
+      // ctx_->stats().fail_async_handshake_error_.inc();
+      ENVOY_CONN_LOG(debug, "async handshake completion error", handshake_callbacks_->connection());
+      handshake_callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite);
+      return;
+    }
   }
-
-  // This function will not be called again, the handshake must be ready.
+  // This function will not be called again, the handshake must be ready at this point.
   ASSERT(state_ != Ssl::SocketState::HandshakeInProgress);
 }
 
 Network::PostIoAction SslHandshakerImpl::doHandshake() {
+  ENVOY_CONN_LOG(debug, "doHandshake", handshake_callbacks_->connection());
   ASSERT(state_ != Ssl::SocketState::HandshakeComplete && state_ != Ssl::SocketState::ShutdownSent);
   int rc = SSL_do_handshake(ssl());
   if (rc == 1) {
@@ -262,6 +264,9 @@ Network::PostIoAction SslHandshakerImpl::doHandshake() {
     switch (err) {
     case SSL_ERROR_WANT_READ:
     case SSL_ERROR_WANT_WRITE:
+      // TODO: This means that we need to wait for the socket to become readable/writable and
+      // then try again. The waiting should be done in Envoy event loop also in the async case.
+      ENVOY_CONN_LOG(debug, "SSL_ERROR_WANT_READ/WRITE", handshake_callbacks_->connection());
       return PostIoAction::KeepOpen;
     case SSL_ERROR_WANT_ASYNC:
       ENVOY_CONN_LOG(debug, "SSL handshake: request async handling", handshake_callbacks_->connection());
@@ -308,6 +313,7 @@ Network::PostIoAction SslHandshakerImpl::doHandshake() {
       return PostIoAction::KeepOpen;
     default:
       ENVOY_CONN_LOG(debug, "handshake error: {}", handshake_callbacks_->connection(), err);
+      state_ = Ssl::SocketState::HandshakeComplete;
       handshake_callbacks_->onFailure();
       return PostIoAction::Close;
     }
