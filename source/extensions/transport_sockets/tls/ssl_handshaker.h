@@ -77,7 +77,7 @@ public:
 
 private:
   Ssl::HandshakeCallbacks* handshake_callbacks_;
-  void asyncCb();
+  void asyncCb(int fd);
 
   Ssl::SocketState state_;
   mutable std::vector<std::string> cached_uri_san_local_certificate_;

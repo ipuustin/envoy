@@ -222,26 +222,23 @@ const std::string& SslHandshakerImpl::tlsVersion() const {
   return cached_tls_version_;
 }
 
-void SslHandshakerImpl::asyncCb() {
-  ENVOY_CONN_LOG(debug, "SSL async done!", handshake_callbacks_->connection());
-  ASSERT(state_ != Ssl::SocketState::HandshakeComplete);
+void SslHandshakerImpl::asyncCb(int fd) {
+  ENVOY_CONN_LOG(debug, "SSL async done for fd {}!", handshake_callbacks_->connection(), fd);
+  ASSERT(state_ != Ssl::SocketState::PreHandshake);
+  ASSERT(handshake_callbacks_->connection().dispatcher().isThreadSafe());
 
-  if (state_ == Ssl::SocketState::ShutdownSent) {
+  if (state_ == Ssl::SocketState::ShutdownSent || state_ == Ssl::SocketState::HandshakeComplete) {
     return;
   }
 
-  while (state_ == Ssl::SocketState::HandshakeInProgress) {
-    PostIoAction action = doHandshake();
+  PostIoAction action = doHandshake();
 
-    if (action == PostIoAction::Close) {
-      // ctx_->stats().fail_async_handshake_error_.inc();
-      ENVOY_CONN_LOG(debug, "async handshake completion error", handshake_callbacks_->connection());
-      handshake_callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite);
-      return;
-    }
+  if (action == PostIoAction::Close) {
+    // ctx_->stats().fail_async_handshake_error_.inc();
+    ENVOY_CONN_LOG(debug, "async handshake completion error", handshake_callbacks_->connection());
+    handshake_callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite);
+    return;
   }
-  // This function will not be called again, the handshake must be ready at this point.
-  ASSERT(state_ != Ssl::SocketState::HandshakeInProgress);
 }
 
 Network::PostIoAction SslHandshakerImpl::doHandshake() {
@@ -261,19 +258,20 @@ Network::PostIoAction SslHandshakerImpl::doHandshake() {
     OSSL_ASYNC_FD* fds;
     size_t numfds;
     int err = SSL_get_error(ssl(), rc);
+    int fd;
     switch (err) {
     case SSL_ERROR_WANT_READ:
+      // TODO: This means that we need to wait for the socket to become readable/writable and
+      // then try again. The waiting should be done in Envoy event loop also in the async case.
+      ENVOY_CONN_LOG(debug, "SSL_ERROR_WANT_READ", handshake_callbacks_->connection());
+      return PostIoAction::KeepOpen;
     case SSL_ERROR_WANT_WRITE:
       // TODO: This means that we need to wait for the socket to become readable/writable and
       // then try again. The waiting should be done in Envoy event loop also in the async case.
-      ENVOY_CONN_LOG(debug, "SSL_ERROR_WANT_READ/WRITE", handshake_callbacks_->connection());
+      ENVOY_CONN_LOG(debug, "SSL_ERROR_WANT_WRITE", handshake_callbacks_->connection());
       return PostIoAction::KeepOpen;
     case SSL_ERROR_WANT_ASYNC:
-      ENVOY_CONN_LOG(debug, "SSL handshake: request async handling", handshake_callbacks_->connection());
-
-      if (state_ == Ssl::SocketState::HandshakeInProgress) {
-        return PostIoAction::KeepOpen;
-      }
+      ENVOY_CONN_LOG(debug, "SSL_ERROR_WANT_ASYNC", handshake_callbacks_->connection());
 
       state_ = Ssl::SocketState::HandshakeInProgress;
 
@@ -302,11 +300,14 @@ Network::PostIoAction SslHandshakerImpl::doHandshake() {
         return PostIoAction::Close;
       }
 
+      fd = fds[0];
       file_event_ = handshake_callbacks_->connection().dispatcher().createFileEvent(
-          fds[0], [this](uint32_t /* events */) -> void { asyncCb(); },
+          fd, [this, fd](uint32_t /* events */) -> void {
+            asyncCb(fd);
+          },
           Event::FileTriggerType::Edge, Event::FileReadyType::Read);
 
-      ENVOY_CONN_LOG(debug, "SSL async fd: {}, numfds: {}", handshake_callbacks_->connection(), fds[0],
+      ENVOY_CONN_LOG(debug, "SSL async fd: {}, numfds: {}", handshake_callbacks_->connection(), fd,
                      numfds);
       free(fds);
 
