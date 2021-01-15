@@ -231,7 +231,7 @@ void SslHandshakerImpl::asyncCb(int fd) {
     return;
   }
 
-  PostIoAction action = doHandshake();
+  PostIoAction action = doHandshake(true);
 
   if (action == PostIoAction::Close) {
     // ctx_->stats().fail_async_handshake_error_.inc();
@@ -242,6 +242,10 @@ void SslHandshakerImpl::asyncCb(int fd) {
 }
 
 Network::PostIoAction SslHandshakerImpl::doHandshake() {
+  return doHandshake(false);
+}
+
+Network::PostIoAction SslHandshakerImpl::doHandshake(bool fromAsync) {
   ENVOY_CONN_LOG(debug, "doHandshake", handshake_callbacks_->connection());
   ASSERT(state_ != Ssl::SocketState::HandshakeComplete && state_ != Ssl::SocketState::ShutdownSent);
   int rc = SSL_do_handshake(ssl());
@@ -266,12 +270,18 @@ Network::PostIoAction SslHandshakerImpl::doHandshake() {
       ENVOY_CONN_LOG(debug, "SSL_ERROR_WANT_READ", handshake_callbacks_->connection());
       return PostIoAction::KeepOpen;
     case SSL_ERROR_WANT_WRITE:
-      // TODO: This means that we need to wait for the socket to become readable/writable and
-      // then try again. The waiting should be done in Envoy event loop also in the async case.
       ENVOY_CONN_LOG(debug, "SSL_ERROR_WANT_WRITE", handshake_callbacks_->connection());
       return PostIoAction::KeepOpen;
     case SSL_ERROR_WANT_ASYNC:
       ENVOY_CONN_LOG(debug, "SSL_ERROR_WANT_ASYNC", handshake_callbacks_->connection());
+
+      if (state_ == Ssl::SocketState::HandshakeInProgress && !fromAsync) {
+        // There's an ongoing async handshake going on and this call didn't
+        // originate from the async call handler -- this is probably from another
+        // source such as socket read or write calls. Don't start a new async
+        // callback but instead just wait for the exising one to trigger.
+        return PostIoAction::KeepOpen;
+      }
 
       state_ = Ssl::SocketState::HandshakeInProgress;
 
