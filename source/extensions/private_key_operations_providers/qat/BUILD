@@ -2,12 +2,12 @@ load(
     "//bazel:envoy_build_system.bzl",
     "envoy_cc_extension",
     "envoy_cc_library",
-    "envoy_package",
+    "envoy_extension_package",
 )
 
 licenses(["notice"])  # Apache 2
 
-envoy_package()
+envoy_extension_package()
 
 envoy_cc_library(
     name = "qat_private_key_provider_lib",
@@ -39,7 +39,8 @@ envoy_cc_extension(
     name = "config",
     srcs = ["config.cc"],
     hdrs = ["config.h"],
-    security_posture = "robust_to_untrusted_downstream",
+    # category = "envoy.upstreams",
+    # security_posture = "robust_to_untrusted_downstream",
     deps = [
         ":qat_private_key_provider_lib",
         "//include/envoy/protobuf:message_validator_interface",

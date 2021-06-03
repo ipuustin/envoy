@@ -516,7 +516,7 @@ def _com_google_googletest():
     )
 
 def _com_intel_qat():
-    _repository_impl(
+    external_http_archive(
         name = "com_intel_qat",
         build_file = "@envoy//bazel/external:qat.BUILD",
         patches = [

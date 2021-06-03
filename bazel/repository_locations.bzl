@@ -1063,9 +1063,17 @@ REPOSITORY_LOCATIONS_SPEC = dict(
         cpe = "N/A",
     ),
     com_intel_qat = dict(
+        project_name = "Intel QuickAssist",
+        project_desc = "Intel QuickAssist",
+        project_url = "https://01.org/intel-quick-assist-technology/",
         sha256 = "bf777c7194245cb5ad07804847b92b8d149fee603edfbd572addb62c61100df6",
         urls = ["https://01.org/sites/default/files/downloads//qat1.7.l.4.10.0-00014.tar.gz"],
-        use_category = ["dataplane"],
+        version = "1.7.l.4.10.0-00014",
+        use_category = ["dataplane_ext"],
         cpe = "N/A",
+        release_date = "2020-05-21",
+        extensions = [
+            "envoy.private_key_operations_providers.qat",
+        ],
     ),
 )
